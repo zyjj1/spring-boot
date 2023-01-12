@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ import java.util.Deque;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.Random;
 import java.util.function.Function;
 
 import org.springframework.boot.origin.OriginLookup;
@@ -49,6 +48,10 @@ class SpringConfigurationPropertySources implements Iterable<ConfigurationProper
 	SpringConfigurationPropertySources(Iterable<PropertySource<?>> sources) {
 		Assert.notNull(sources, "Sources must not be null");
 		this.sources = sources;
+	}
+
+	boolean isUsingSources(Iterable<PropertySource<?>> sources) {
+		return this.sources == sources;
 	}
 
 	@Override
@@ -111,8 +114,8 @@ class SpringConfigurationPropertySources implements Iterable<ConfigurationProper
 					return fetchNext();
 				}
 				PropertySource<?> candidate = this.iterators.peek().next();
-				if (candidate.getSource() instanceof ConfigurableEnvironment) {
-					push((ConfigurableEnvironment) candidate.getSource());
+				if (candidate.getSource() instanceof ConfigurableEnvironment configurableEnvironment) {
+					push(configurableEnvironment);
 					return fetchNext();
 				}
 				if (isIgnored(candidate)) {
@@ -128,14 +131,8 @@ class SpringConfigurationPropertySources implements Iterable<ConfigurationProper
 		}
 
 		private boolean isIgnored(PropertySource<?> candidate) {
-			return (isRandomPropertySource(candidate) || candidate instanceof StubPropertySource
+			return (candidate instanceof StubPropertySource
 					|| candidate instanceof ConfigurationPropertySourcesPropertySource);
-		}
-
-		private boolean isRandomPropertySource(PropertySource<?> candidate) {
-			Object source = candidate.getSource();
-			return (source instanceof Random) || (source instanceof PropertySource<?>
-					&& ((PropertySource<?>) source).getSource() instanceof Random);
 		}
 
 	}

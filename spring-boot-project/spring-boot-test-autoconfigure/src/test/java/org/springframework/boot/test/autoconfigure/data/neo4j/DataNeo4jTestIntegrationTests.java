@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,7 +47,7 @@ class DataNeo4jTestIntegrationTests {
 
 	@Container
 	static final Neo4jContainer<?> neo4j = new Neo4jContainer<>(DockerImageNames.neo4j()).withoutAuthentication()
-			.withStartupTimeout(Duration.ofMinutes(10));
+			.withStartupAttempts(5).withStartupTimeout(Duration.ofMinutes(10));
 
 	@DynamicPropertySource
 	static void neo4jProperties(DynamicPropertyRegistry registry) {
@@ -69,7 +69,7 @@ class DataNeo4jTestIntegrationTests {
 		assertThat(exampleGraph.getId()).isNull();
 		ExampleGraph savedGraph = this.exampleRepository.save(exampleGraph);
 		assertThat(savedGraph.getId()).isNotNull();
-		assertThat(this.neo4jTemplate.count(ExampleGraph.class)).isEqualTo(1);
+		assertThat(this.neo4jTemplate.count(ExampleGraph.class)).isOne();
 	}
 
 	@Test

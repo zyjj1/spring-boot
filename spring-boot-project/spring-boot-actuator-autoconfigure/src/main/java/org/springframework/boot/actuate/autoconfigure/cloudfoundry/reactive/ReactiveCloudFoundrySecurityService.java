@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,10 +20,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import reactor.core.publisher.Mono;
+import reactor.netty.http.Http11SslContextSpec;
 import reactor.netty.http.client.HttpClient;
 
 import org.springframework.boot.actuate.autoconfigure.cloudfoundry.AccessLevel;
@@ -31,6 +31,7 @@ import org.springframework.boot.actuate.autoconfigure.cloudfoundry.CloudFoundryA
 import org.springframework.boot.actuate.autoconfigure.cloudfoundry.CloudFoundryAuthorizationException.Reason;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.util.Assert;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -56,7 +57,7 @@ class ReactiveCloudFoundrySecurityService {
 
 	ReactiveCloudFoundrySecurityService(WebClient.Builder webClientBuilder, String cloudControllerUrl,
 			boolean skipSslValidation) {
-		Assert.notNull(webClientBuilder, "Webclient must not be null");
+		Assert.notNull(webClientBuilder, "WebClient must not be null");
 		Assert.notNull(cloudControllerUrl, "CloudControllerUrl must not be null");
 		if (skipSslValidation) {
 			webClientBuilder.clientConnector(buildTrustAllSslConnector());
@@ -66,14 +67,13 @@ class ReactiveCloudFoundrySecurityService {
 	}
 
 	protected ReactorClientHttpConnector buildTrustAllSslConnector() {
-		HttpClient client = HttpClient.create()
-				.secure((sslContextSpec) -> sslContextSpec.sslContext(createSslContext()));
+		HttpClient client = HttpClient.create().secure((spec) -> spec.sslContext(createSslContextSpec()));
 		return new ReactorClientHttpConnector(client);
 	}
 
-	private SslContextBuilder createSslContext() {
-		return SslContextBuilder.forClient().sslProvider(SslProvider.JDK)
-				.trustManager(InsecureTrustManagerFactory.INSTANCE);
+	private Http11SslContextSpec createSslContextSpec() {
+		return Http11SslContextSpec.forClient().configure(
+				(builder) -> builder.sslProvider(SslProvider.JDK).trustManager(InsecureTrustManagerFactory.INSTANCE));
 	}
 
 	/**
@@ -90,8 +90,8 @@ class ReactiveCloudFoundrySecurityService {
 	}
 
 	private Throwable mapError(Throwable throwable) {
-		if (throwable instanceof WebClientResponseException) {
-			HttpStatus statusCode = ((WebClientResponseException) throwable).getStatusCode();
+		if (throwable instanceof WebClientResponseException webClientResponseException) {
+			HttpStatusCode statusCode = webClientResponseException.getStatusCode();
 			if (statusCode.equals(HttpStatus.FORBIDDEN)) {
 				return new CloudFoundryAuthorizationException(Reason.ACCESS_DENIED, "Access denied");
 			}

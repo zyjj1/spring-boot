@@ -2,37 +2,37 @@ plugins {
 	id "java-gradle-plugin"
 	id "maven-publish"
 	id "org.asciidoctor.jvm.convert"
-	id "org.asciidoctor.jvm.pdf"
 	id "org.springframework.boot.conventions"
 	id "org.springframework.boot.maven-repository"
 	id "org.springframework.boot.optional-dependencies"
 }
 
-description = "Spring Boot Gradle Plugin"
+description = "Spring Boot Gradle Plugins"
 
 configurations {
 	documentation
-}
-
-repositories {
-	maven {
-		url "https://repo.spring.io/release"
-		mavenContent {
-			includeGroup "io.spring.asciidoctor"
-		}
+	"testCompileClasspath" {
+		// Downgrade SLF4J is required for tests to run in Eclipse
+		resolutionStrategy.force("org.slf4j:slf4j-api:1.7.36")
 	}
 }
-
 dependencies {
+	asciidoctorExtensions("io.spring.asciidoctor:spring-asciidoctor-extensions-section-ids")
+
 	implementation(project(":spring-boot-project:spring-boot-tools:spring-boot-buildpack-platform"))
 	implementation(project(":spring-boot-project:spring-boot-tools:spring-boot-loader-tools"))
 	implementation("io.spring.gradle:dependency-management-plugin")
 	implementation("org.apache.commons:commons-compress")
 	implementation("org.springframework:spring-core")
 
-	optional("org.jetbrains.kotlin:kotlin-gradle-plugin:1.3.50")
+	optional("org.graalvm.buildtools:native-gradle-plugin")
+	optional("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion") {
+		exclude(group: "commons-logging", module: "commons-logging")
+	}
 
 	testImplementation(project(":spring-boot-project:spring-boot-tools:spring-boot-test-support"))
+	testImplementation(project(":spring-boot-project:spring-boot-tools:spring-boot-gradle-test-support"))
+	testImplementation("com.tngtech.archunit:archunit-junit5:0.22.0")
 	testImplementation("org.assertj:assertj-core")
 	testImplementation("org.junit.jupiter:junit-jupiter")
 	testImplementation("org.mockito:mockito-core")
@@ -47,6 +47,12 @@ gradlePlugin {
 			displayName = "Spring Boot Gradle Plugin"
 			description = "Spring Boot Gradle Plugin"
 			implementationClass = "org.springframework.boot.gradle.plugin.SpringBootPlugin"
+		}
+		springBootAotPlugin {
+			id = "org.springframework.boot.aot"
+			displayName = "Spring Boot AOT Gradle Plugin"
+			description = "Spring Boot AOT Gradle Plugin"
+			implementationClass = "org.springframework.boot.gradle.plugin.SpringBootAotPlugin"
 		}
 	}
 }
@@ -69,23 +75,30 @@ task dependencyVersions(type: org.springframework.boot.build.constraints.Extract
 
 tasks.withType(org.asciidoctor.gradle.jvm.AbstractAsciidoctorTask) {
 	dependsOn dependencyVersions
-	inputs.dir('src/docs/gradle').withPathSensitivity(PathSensitivity.RELATIVE)
+	inputs.dir('src/docs/gradle').withPathSensitivity(PathSensitivity.RELATIVE).withPropertyName('buildScripts')
 	doFirst {
 		attributes "dependency-management-plugin-version": dependencyVersions.versionConstraints["io.spring.gradle:dependency-management-plugin"]
 	}
+}
+
+tasks.named('test') {
+	inputs.dir('src/docs/gradle').withPathSensitivity(PathSensitivity.RELATIVE).withPropertyName('buildScripts')
 }
 
 asciidoctor {
 	sources {
 		include "index.adoc"
 	}
-	attributes "stylesheet": "css/style.css"
 }
 
-asciidoctorPdf {
+task asciidoctorPdf(type: org.asciidoctor.gradle.jvm.AsciidoctorTask) {
 	sources {
 		include "index.adoc"
 	}
+}
+
+tasks.withType(org.asciidoctor.gradle.jvm.AbstractAsciidoctorTask) {
+	attributes "native-build-tools-version": nativeBuildToolsVersion
 }
 
 javadoc {
@@ -98,6 +111,8 @@ javadoc {
 		splitIndex = true
 		use = true
 		windowTitle = "Spring Boot Gradle Plugin ${project.version} API"
+		links "https://docs.gradle.org/$gradle.gradleVersion/javadoc/"
+		links "https://docs.oracle.com/en/java/javase/17/docs/api/"
 	}
 }
 
@@ -118,4 +133,8 @@ task zip(type: Zip) {
 
 artifacts {
 	"documentation" zip
+}
+
+toolchain {
+	maximumCompatibleJavaVersion = JavaLanguageVersion.of(18)
 }

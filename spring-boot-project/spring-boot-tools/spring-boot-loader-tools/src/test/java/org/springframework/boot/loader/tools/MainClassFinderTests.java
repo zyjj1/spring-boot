@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@
 package org.springframework.boot.loader.tools;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.jar.JarFile;
@@ -45,7 +44,7 @@ class MainClassFinderTests {
 	private TestJarFile testJarFile;
 
 	@BeforeEach
-	void setup(@TempDir File tempDir) throws IOException {
+	void setup(@TempDir File tempDir) {
 		this.testJarFile = new TestJarFile(tempDir);
 	}
 
@@ -165,7 +164,7 @@ class MainClassFinderTests {
 		this.testJarFile.addClass("a/b/G.class", ClassWithMainMethod.class);
 		ClassNameCollector callback = new ClassNameCollector();
 		MainClassFinder.doWithMainClasses(this.testJarFile.getJarSource(), callback);
-		assertThat(callback.getClassNames().toString()).isEqualTo("[a.b.G, a.b.c.D]");
+		assertThat(callback.getClassNames()).hasToString("[a.b.G, a.b.c.D]");
 	}
 
 	@Test
@@ -177,7 +176,7 @@ class MainClassFinderTests {
 		ClassNameCollector callback = new ClassNameCollector();
 		try (JarFile jarFile = this.testJarFile.getJarFile()) {
 			MainClassFinder.doWithMainClasses(jarFile, null, callback);
-			assertThat(callback.getClassNames().toString()).isEqualTo("[a.b.G, a.b.c.D]");
+			assertThat(callback.getClassNames()).hasToString("[a.b.G, a.b.c.D]");
 		}
 	}
 

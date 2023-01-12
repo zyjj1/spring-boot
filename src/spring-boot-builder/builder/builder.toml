@@ -13,6 +13,5 @@ version = "0.0.1"
 # Stack that will be used by the builder
 [stack]
 id = "io.paketo.stacks.tiny"
-build-image = "index.docker.io/paketobuildpacks/build:1.2.2-tiny-cnb"
-run-image = "index.docker.io/paketobuildpacks/run:tiny-cnb"
-run-image-mirrors = ["gcr.io/paketo-buildpacks/run:tiny-cnb"]
+build-image = "projects.registry.vmware.com/springboot/build:tiny-cnb"
+run-image = "projects.registry.vmware.com/springboot/run:tiny-cnb"

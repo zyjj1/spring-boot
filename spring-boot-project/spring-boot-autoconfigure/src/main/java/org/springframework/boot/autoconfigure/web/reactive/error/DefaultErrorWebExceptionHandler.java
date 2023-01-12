@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,6 +35,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
+import org.springframework.util.MimeTypeUtils;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.server.RequestPredicate;
 import org.springframework.web.reactive.function.server.RouterFunction;
@@ -90,22 +91,6 @@ public class DefaultErrorWebExceptionHandler extends AbstractErrorWebExceptionHa
 	}
 
 	private final ErrorProperties errorProperties;
-
-	/**
-	 * Create a new {@code DefaultErrorWebExceptionHandler} instance.
-	 * @param errorAttributes the error attributes
-	 * @param resourceProperties the resources configuration properties
-	 * @param errorProperties the error configuration properties
-	 * @param applicationContext the current application context
-	 * @deprecated since 2.4.0 for removal in 2.6.0 in favor of
-	 * {@link #DefaultErrorWebExceptionHandler(ErrorAttributes, Resources, ErrorProperties, ApplicationContext)}
-	 */
-	@Deprecated
-	public DefaultErrorWebExceptionHandler(ErrorAttributes errorAttributes,
-			org.springframework.boot.autoconfigure.web.ResourceProperties resourceProperties,
-			ErrorProperties errorProperties, ApplicationContext applicationContext) {
-		this(errorAttributes, (Resources) resourceProperties, errorProperties, applicationContext);
-	}
 
 	/**
 	 * Create a new {@code DefaultErrorWebExceptionHandler} instance.
@@ -188,14 +173,11 @@ public class DefaultErrorWebExceptionHandler extends AbstractErrorWebExceptionHa
 	 * @return if the stacktrace attribute should be included
 	 */
 	protected boolean isIncludeStackTrace(ServerRequest request, MediaType produces) {
-		switch (this.errorProperties.getIncludeStacktrace()) {
-		case ALWAYS:
-			return true;
-		case ON_PARAM:
-			return isTraceEnabled(request);
-		default:
-			return false;
-		}
+		return switch (this.errorProperties.getIncludeStacktrace()) {
+			case ALWAYS -> true;
+			case ON_PARAM -> isTraceEnabled(request);
+			default -> false;
+		};
 	}
 
 	/**
@@ -205,14 +187,11 @@ public class DefaultErrorWebExceptionHandler extends AbstractErrorWebExceptionHa
 	 * @return if the message attribute should be included
 	 */
 	protected boolean isIncludeMessage(ServerRequest request, MediaType produces) {
-		switch (this.errorProperties.getIncludeMessage()) {
-		case ALWAYS:
-			return true;
-		case ON_PARAM:
-			return isMessageEnabled(request);
-		default:
-			return false;
-		}
+		return switch (this.errorProperties.getIncludeMessage()) {
+			case ALWAYS -> true;
+			case ON_PARAM -> isMessageEnabled(request);
+			default -> false;
+		};
 	}
 
 	/**
@@ -222,14 +201,11 @@ public class DefaultErrorWebExceptionHandler extends AbstractErrorWebExceptionHa
 	 * @return if the errors attribute should be included
 	 */
 	protected boolean isIncludeBindingErrors(ServerRequest request, MediaType produces) {
-		switch (this.errorProperties.getIncludeBindingErrors()) {
-		case ALWAYS:
-			return true;
-		case ON_PARAM:
-			return isBindingErrorsEnabled(request);
-		default:
-			return false;
-		}
+		return switch (this.errorProperties.getIncludeBindingErrors()) {
+			case ALWAYS -> true;
+			case ON_PARAM -> isBindingErrorsEnabled(request);
+			default -> false;
+		};
 	}
 
 	/**
@@ -253,7 +229,7 @@ public class DefaultErrorWebExceptionHandler extends AbstractErrorWebExceptionHa
 			try {
 				List<MediaType> acceptedMediaTypes = serverRequest.headers().accept();
 				acceptedMediaTypes.removeIf(MediaType.ALL::equalsTypeAndSubtype);
-				MediaType.sortBySpecificityAndQuality(acceptedMediaTypes);
+				MimeTypeUtils.sortBySpecificity(acceptedMediaTypes);
 				return acceptedMediaTypes.stream().anyMatch(MediaType.TEXT_HTML::isCompatibleWith);
 			}
 			catch (InvalidMediaTypeException ex) {

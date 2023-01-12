@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,11 +25,11 @@ import ch.qos.logback.core.Appender;
 import ch.qos.logback.core.ConsoleAppender;
 import ch.qos.logback.core.rolling.RollingFileAppender;
 import ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy;
+import ch.qos.logback.core.spi.ScanException;
 import ch.qos.logback.core.util.FileSize;
 import ch.qos.logback.core.util.OptionHelper;
 
 import org.springframework.boot.logging.LogFile;
-import org.springframework.boot.logging.LoggingInitializationContext;
 
 /**
  * Default logback configuration used by Spring Boot. Uses {@link LogbackConfigurator} to
@@ -41,12 +41,13 @@ import org.springframework.boot.logging.LoggingInitializationContext;
  * @author Madhura Bhave
  * @author Vedran Pavic
  * @author Robert Thornton
+ * @author Scott Frederick
  */
 class DefaultLogbackConfiguration {
 
 	private final LogFile logFile;
 
-	DefaultLogbackConfiguration(LoggingInitializationContext initializationContext, LogFile logFile) {
+	DefaultLogbackConfiguration(LogFile logFile) {
 		this.logFile = logFile;
 	}
 
@@ -69,14 +70,17 @@ class DefaultLogbackConfiguration {
 		config.conversionRule("wex", WhitespaceThrowableProxyConverter.class);
 		config.conversionRule("wEx", ExtendedWhitespaceThrowableProxyConverter.class);
 		config.getContext().putProperty("CONSOLE_LOG_PATTERN", resolve(config, "${CONSOLE_LOG_PATTERN:-"
-				+ "%clr(%d{${LOG_DATEFORMAT_PATTERN:-yyyy-MM-dd HH:mm:ss.SSS}}){faint} %clr(${LOG_LEVEL_PATTERN:-%5p}) "
+				+ "%clr(%d{${LOG_DATEFORMAT_PATTERN:-yyyy-MM-dd'T'HH:mm:ss.SSSXXX}}){faint} %clr(${LOG_LEVEL_PATTERN:-%5p}) "
 				+ "%clr(${PID:- }){magenta} %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} "
 				+ "%clr(:){faint} %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}}"));
-		config.getContext().putProperty("CONSOLE_LOG_CHARSET", resolve(config, "${CONSOLE_LOG_CHARSET:-default}"));
+		String defaultCharset = Charset.defaultCharset().name();
+		config.getContext().putProperty("CONSOLE_LOG_CHARSET",
+				resolve(config, "${CONSOLE_LOG_CHARSET:-" + defaultCharset + "}"));
 		config.getContext().putProperty("FILE_LOG_PATTERN", resolve(config, "${FILE_LOG_PATTERN:-"
-				+ "%d{${LOG_DATEFORMAT_PATTERN:-yyyy-MM-dd HH:mm:ss.SSS}} ${LOG_LEVEL_PATTERN:-%5p} ${PID:- } --- [%t] "
+				+ "%d{${LOG_DATEFORMAT_PATTERN:-yyyy-MM-dd'T'HH:mm:ss.SSSXXX}} ${LOG_LEVEL_PATTERN:-%5p} ${PID:- } --- [%t] "
 				+ "%-40.40logger{39} : %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}}"));
-		config.getContext().putProperty("FILE_LOG_CHARSET", resolve(config, "${FILE_LOG_CHARSET:-default}"));
+		config.getContext().putProperty("FILE_LOG_CHARSET",
+				resolve(config, "${FILE_LOG_CHARSET:-" + defaultCharset + "}"));
 		config.logger("org.apache.catalina.startup.DigesterFactory", Level.ERROR);
 		config.logger("org.apache.catalina.util.LifecycleBase", Level.ERROR);
 		config.logger("org.apache.coyote.http11.Http11NioProtocol", Level.WARN);
@@ -106,13 +110,12 @@ class DefaultLogbackConfiguration {
 		appender.setEncoder(encoder);
 		config.start(encoder);
 		appender.setFile(logFile);
-		setRollingPolicy(appender, config, logFile);
+		setRollingPolicy(appender, config);
 		config.appender("FILE", appender);
 		return appender;
 	}
 
-	private void setRollingPolicy(RollingFileAppender<ILoggingEvent> appender, LogbackConfigurator config,
-			String logFile) {
+	private void setRollingPolicy(RollingFileAppender<ILoggingEvent> appender, LogbackConfigurator config) {
 		SizeAndTimeBasedRollingPolicy<ILoggingEvent> rollingPolicy = new SizeAndTimeBasedRollingPolicy<>();
 		rollingPolicy.setContext(config.getContext());
 		rollingPolicy.setFileNamePattern(
@@ -144,7 +147,12 @@ class DefaultLogbackConfiguration {
 	}
 
 	private String resolve(LogbackConfigurator config, String val) {
-		return OptionHelper.substVars(val, config.getContext());
+		try {
+			return OptionHelper.substVars(val, config.getContext());
+		}
+		catch (ScanException ex) {
+			throw new RuntimeException(ex);
+		}
 	}
 
 }

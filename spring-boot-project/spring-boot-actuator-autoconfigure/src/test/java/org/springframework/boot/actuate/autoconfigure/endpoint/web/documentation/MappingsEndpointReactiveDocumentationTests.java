@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package org.springframework.boot.actuate.autoconfigure.endpoint.web.documentation;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -30,8 +31,8 @@ import org.springframework.boot.actuate.web.mappings.MappingsEndpoint;
 import org.springframework.boot.actuate.web.mappings.reactive.DispatcherHandlersMappingDescriptionProvider;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.web.embedded.netty.NettyReactiveWebServerFactory;
-import org.springframework.boot.web.server.LocalServerPort;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -73,11 +74,11 @@ class MappingsEndpointReactiveDocumentationTests extends AbstractEndpointDocumen
 	void webTestClient(RestDocumentationContextProvider restDocumentation) {
 		this.client = WebTestClient.bindToServer()
 				.filter(documentationConfiguration(restDocumentation).snippets().withDefaults())
-				.baseUrl("http://localhost:" + this.port).build();
+				.baseUrl("http://localhost:" + this.port).responseTimeout(Duration.ofMinutes(5)).build();
 	}
 
 	@Test
-	void mappings() throws Exception {
+	void mappings() {
 		List<FieldDescriptor> requestMappingConditions = Arrays.asList(
 				requestMappingConditionField("").description("Details of the request mapping conditions.").optional(),
 				requestMappingConditionField(".consumes").description("Details of the consumes condition"),

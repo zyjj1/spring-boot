@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,9 +34,9 @@ import org.springframework.boot.loader.data.RandomAccessData;
 
 /**
  * Provides access to entries from a {@link JarFile}. In order to reduce memory
- * consumption entry details are stored using int arrays. The {@code hashCodes} array
- * stores the hash code of the entry name, the {@code centralDirectoryOffsets} provides
- * the offset to the central directory record and {@code positions} provides the original
+ * consumption entry details are stored using arrays. The {@code hashCodes} array stores
+ * the hash code of the entry name, the {@code centralDirectoryOffsets} provides the
+ * offset to the central directory record and {@code positions} provides the original
  * order position of the entry. The arrays are stored in hashCode order so that a binary
  * search can be used to find a name.
  * <p>
@@ -57,19 +57,7 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 
 	private static final int BASE_VERSION = 8;
 
-	private static final int RUNTIME_VERSION;
-
-	static {
-		int version;
-		try {
-			Object runtimeVersion = Runtime.class.getMethod("version").invoke(null);
-			version = (int) runtimeVersion.getClass().getMethod("major").invoke(runtimeVersion);
-		}
-		catch (Throwable ex) {
-			version = BASE_VERSION;
-		}
-		RUNTIME_VERSION = version;
-	}
+	private static final int RUNTIME_VERSION = Runtime.version().feature();
 
 	private static final long LOCAL_FILE_HEADER_SIZE = 30;
 
@@ -89,7 +77,7 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 
 	private int[] hashCodes;
 
-	private int[] centralDirectoryOffsets;
+	private Offsets centralDirectoryOffsets;
 
 	private int[] positions;
 
@@ -98,7 +86,7 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 	private JarEntryCertification[] certifications;
 
 	private final Map<Integer, FileHeader> entriesCache = Collections
-			.synchronizedMap(new LinkedHashMap<Integer, FileHeader>(16, 0.75f, true) {
+			.synchronizedMap(new LinkedHashMap<>(16, 0.75f, true) {
 
 				@Override
 				protected boolean removeEldestEntry(Map.Entry<Integer, FileHeader> eldest) {
@@ -110,9 +98,6 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 	JarFileEntries(JarFile jarFile, JarEntryFilter filter) {
 		this.jarFile = jarFile;
 		this.filter = filter;
-		if (RUNTIME_VERSION == BASE_VERSION) {
-			this.multiReleaseJar = false;
-		}
 	}
 
 	@Override
@@ -120,21 +105,21 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 		int maxSize = endRecord.getNumberOfRecords();
 		this.centralDirectoryData = centralDirectoryData;
 		this.hashCodes = new int[maxSize];
-		this.centralDirectoryOffsets = new int[maxSize];
+		this.centralDirectoryOffsets = Offsets.from(endRecord);
 		this.positions = new int[maxSize];
 	}
 
 	@Override
-	public void visitFileHeader(CentralDirectoryFileHeader fileHeader, int dataOffset) {
+	public void visitFileHeader(CentralDirectoryFileHeader fileHeader, long dataOffset) {
 		AsciiBytes name = applyFilter(fileHeader.getName());
 		if (name != null) {
 			add(name, dataOffset);
 		}
 	}
 
-	private void add(AsciiBytes name, int dataOffset) {
+	private void add(AsciiBytes name, long dataOffset) {
 		this.hashCodes[this.size] = name.hashCode();
-		this.centralDirectoryOffsets[this.size] = dataOffset;
+		this.centralDirectoryOffsets.set(this.size, dataOffset);
 		this.positions[this.size] = this.size;
 		this.size++;
 	}
@@ -183,14 +168,8 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 
 	private void swap(int i, int j) {
 		swap(this.hashCodes, i, j);
-		swap(this.centralDirectoryOffsets, i, j);
+		this.centralDirectoryOffsets.swap(i, j);
 		swap(this.positions, i, j);
-	}
-
-	private void swap(int[] array, int i, int j) {
-		int temp = array[i];
-		array[i] = array[j];
-		array[j] = temp;
 	}
 
 	@Override
@@ -250,7 +229,7 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 		T entry = doGetEntry(name, type, cacheEntry, null);
 		if (!isMetaInfEntry(name) && isMultiReleaseJar()) {
 			int version = RUNTIME_VERSION;
-			AsciiBytes nameAlias = (entry instanceof JarEntry) ? ((JarEntry) entry).getAsciiBytesName()
+			AsciiBytes nameAlias = (entry instanceof JarEntry jarEntry) ? jarEntry.getAsciiBytesName()
 					: new AsciiBytes(name.toString());
 			while (version > BASE_VERSION) {
 				T versionedEntry = doGetEntry("META-INF/versions/" + version + "/" + name, type, cacheEntry, nameAlias);
@@ -316,9 +295,10 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 	@SuppressWarnings("unchecked")
 	private <T extends FileHeader> T getEntry(int index, Class<T> type, boolean cacheEntry, AsciiBytes nameAlias) {
 		try {
+			long offset = this.centralDirectoryOffsets.get(index);
 			FileHeader cached = this.entriesCache.get(index);
-			FileHeader entry = (cached != null) ? cached : CentralDirectoryFileHeader
-					.fromRandomAccessData(this.centralDirectoryData, this.centralDirectoryOffsets[index], this.filter);
+			FileHeader entry = (cached != null) ? cached
+					: CentralDirectoryFileHeader.fromRandomAccessData(this.centralDirectoryData, offset, this.filter);
 			if (CentralDirectoryFileHeader.class.equals(entry.getClass()) && type.equals(JarEntry.class)) {
 				entry = new JarEntry(this.jarFile, index, (CentralDirectoryFileHeader) entry, nameAlias);
 			}
@@ -355,10 +335,10 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 		JarEntryCertification[] certifications = this.certifications;
 		if (certifications == null) {
 			certifications = new JarEntryCertification[this.size];
-			// We fallback to use JarInputStream to obtain the certs. This isn't that
+			// We fall back to use JarInputStream to obtain the certs. This isn't that
 			// fast, but hopefully doesn't happen too often.
 			try (JarInputStream certifiedJarStream = new JarInputStream(this.jarFile.getData().getInputStream())) {
-				java.util.jar.JarEntry certifiedEntry = null;
+				java.util.jar.JarEntry certifiedEntry;
 				while ((certifiedEntry = certifiedJarStream.getNextJarEntry()) != null) {
 					// Entry must be closed to trigger a read and set entry certificates
 					certifiedJarStream.closeEntry();
@@ -385,6 +365,18 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 			index++;
 		}
 		return -1;
+	}
+
+	private static void swap(int[] array, int i, int j) {
+		int temp = array[i];
+		array[i] = array[j];
+		array[j] = temp;
+	}
+
+	private static void swap(long[] array, int i, int j) {
+		long temp = array[i];
+		array[i] = array[j];
+		array[j] = temp;
 	}
 
 	/**
@@ -416,6 +408,82 @@ class JarFileEntries implements CentralDirectoryVisitor, Iterable<JarEntry> {
 			int entryIndex = JarFileEntries.this.positions[this.index];
 			this.index++;
 			return getEntry(entryIndex, JarEntry.class, false, null);
+		}
+
+	}
+
+	/**
+	 * Interface to manage offsets to central directory records. Regular zip files are
+	 * backed by an {@code int[]} based implementation, Zip64 files are backed by a
+	 * {@code long[]} and will consume more memory.
+	 */
+	private interface Offsets {
+
+		void set(int index, long value);
+
+		long get(int index);
+
+		void swap(int i, int j);
+
+		static Offsets from(CentralDirectoryEndRecord endRecord) {
+			int size = endRecord.getNumberOfRecords();
+			return endRecord.isZip64() ? new Zip64Offsets(size) : new ZipOffsets(size);
+		}
+
+	}
+
+	/**
+	 * {@link Offsets} implementation for regular zip files.
+	 */
+	private static final class ZipOffsets implements Offsets {
+
+		private final int[] offsets;
+
+		private ZipOffsets(int size) {
+			this.offsets = new int[size];
+		}
+
+		@Override
+		public void swap(int i, int j) {
+			JarFileEntries.swap(this.offsets, i, j);
+		}
+
+		@Override
+		public void set(int index, long value) {
+			this.offsets[index] = (int) value;
+		}
+
+		@Override
+		public long get(int index) {
+			return this.offsets[index];
+		}
+
+	}
+
+	/**
+	 * {@link Offsets} implementation for zip64 files.
+	 */
+	private static final class Zip64Offsets implements Offsets {
+
+		private final long[] offsets;
+
+		private Zip64Offsets(int size) {
+			this.offsets = new long[size];
+		}
+
+		@Override
+		public void swap(int i, int j) {
+			JarFileEntries.swap(this.offsets, i, j);
+		}
+
+		@Override
+		public void set(int index, long value) {
+			this.offsets[index] = value;
+		}
+
+		@Override
+		public long get(int index) {
+			return this.offsets[index];
 		}
 
 	}

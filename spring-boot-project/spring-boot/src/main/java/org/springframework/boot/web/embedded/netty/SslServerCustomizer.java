@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package org.springframework.boot.web.embedded.netty;
 
+import java.io.InputStream;
 import java.net.Socket;
 import java.net.URL;
 import java.security.InvalidAlgorithmParameterException;
@@ -37,16 +38,19 @@ import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509ExtendedKeyManager;
 
 import io.netty.handler.ssl.ClientAuth;
-import io.netty.handler.ssl.SslContextBuilder;
+import reactor.netty.http.Http11SslContextSpec;
+import reactor.netty.http.Http2SslContextSpec;
 import reactor.netty.http.server.HttpServer;
-import reactor.netty.tcp.SslProvider;
+import reactor.netty.tcp.AbstractProtocolSslContextSpec;
 
 import org.springframework.boot.web.server.Http2;
 import org.springframework.boot.web.server.Ssl;
 import org.springframework.boot.web.server.SslConfigurationValidator;
 import org.springframework.boot.web.server.SslStoreProvider;
 import org.springframework.boot.web.server.WebServerException;
+import org.springframework.util.Assert;
 import org.springframework.util.ResourceUtils;
+import org.springframework.util.StringUtils;
 
 /**
  * {@link NettyServerCustomizer} that configures SSL for the given Reactor Netty server
@@ -55,8 +59,11 @@ import org.springframework.util.ResourceUtils;
  * @author Brian Clozel
  * @author Raheela Aslam
  * @author Chris Bono
+ * @author Cyril Dangerville
  * @since 2.0.0
+ * @deprecated this class is meant for Spring Boot internal use only.
  */
+@Deprecated(since = "2.0.0", forRemoval = false)
 public class SslServerCustomizer implements NettyServerCustomizer {
 
 	private final Ssl ssl;
@@ -73,38 +80,37 @@ public class SslServerCustomizer implements NettyServerCustomizer {
 
 	@Override
 	public HttpServer apply(HttpServer server) {
-		try {
-			return server.secure((contextSpec) -> {
-				SslProvider.DefaultConfigurationSpec spec = contextSpec.sslContext(getContextBuilder());
-				if (this.http2 != null && this.http2.isEnabled()) {
-					spec.defaultConfiguration(SslProvider.DefaultConfigurationType.H2);
-				}
-			});
-		}
-		catch (Exception ex) {
-			throw new IllegalStateException(ex);
-		}
+		AbstractProtocolSslContextSpec<?> sslContextSpec = createSslContextSpec();
+		return server.secure((spec) -> spec.sslContext(sslContextSpec));
 	}
 
-	protected SslContextBuilder getContextBuilder() {
-		SslContextBuilder builder = SslContextBuilder.forServer(getKeyManagerFactory(this.ssl, this.sslStoreProvider))
-				.trustManager(getTrustManagerFactory(this.ssl, this.sslStoreProvider));
-		if (this.ssl.getEnabledProtocols() != null) {
-			builder.protocols(this.ssl.getEnabledProtocols());
+	protected AbstractProtocolSslContextSpec<?> createSslContextSpec() {
+		AbstractProtocolSslContextSpec<?> sslContextSpec;
+		if (this.http2 != null && this.http2.isEnabled()) {
+			sslContextSpec = Http2SslContextSpec.forServer(getKeyManagerFactory(this.ssl, this.sslStoreProvider));
 		}
-		if (this.ssl.getCiphers() != null) {
-			builder.ciphers(Arrays.asList(this.ssl.getCiphers()));
+		else {
+			sslContextSpec = Http11SslContextSpec.forServer(getKeyManagerFactory(this.ssl, this.sslStoreProvider));
 		}
-		if (this.ssl.getClientAuth() == Ssl.ClientAuth.NEED) {
-			builder.clientAuth(ClientAuth.REQUIRE);
-		}
-		else if (this.ssl.getClientAuth() == Ssl.ClientAuth.WANT) {
-			builder.clientAuth(ClientAuth.OPTIONAL);
-		}
-		return builder;
+		sslContextSpec.configure((builder) -> {
+			builder.trustManager(getTrustManagerFactory(this.ssl, this.sslStoreProvider));
+			if (this.ssl.getEnabledProtocols() != null) {
+				builder.protocols(this.ssl.getEnabledProtocols());
+			}
+			if (this.ssl.getCiphers() != null) {
+				builder.ciphers(Arrays.asList(this.ssl.getCiphers()));
+			}
+			if (this.ssl.getClientAuth() == Ssl.ClientAuth.NEED) {
+				builder.clientAuth(ClientAuth.REQUIRE);
+			}
+			else if (this.ssl.getClientAuth() == Ssl.ClientAuth.WANT) {
+				builder.clientAuth(ClientAuth.OPTIONAL);
+			}
+		});
+		return sslContextSpec;
 	}
 
-	protected KeyManagerFactory getKeyManagerFactory(Ssl ssl, SslStoreProvider sslStoreProvider) {
+	KeyManagerFactory getKeyManagerFactory(Ssl ssl, SslStoreProvider sslStoreProvider) {
 		try {
 			KeyStore keyStore = getKeyStore(ssl, sslStoreProvider);
 			SslConfigurationValidator.validateKeyAlias(keyStore, ssl.getKeyAlias());
@@ -112,11 +118,11 @@ public class SslServerCustomizer implements NettyServerCustomizer {
 					? KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
 					: new ConfigurableAliasKeyManagerFactory(ssl.getKeyAlias(),
 							KeyManagerFactory.getDefaultAlgorithm());
-			char[] keyPassword = (ssl.getKeyPassword() != null) ? ssl.getKeyPassword().toCharArray() : null;
-			if (keyPassword == null && ssl.getKeyStorePassword() != null) {
-				keyPassword = ssl.getKeyStorePassword().toCharArray();
+			String keyPassword = (sslStoreProvider != null) ? sslStoreProvider.getKeyPassword() : null;
+			if (keyPassword == null) {
+				keyPassword = (ssl.getKeyPassword() != null) ? ssl.getKeyPassword() : ssl.getKeyStorePassword();
 			}
-			keyManagerFactory.init(keyStore, keyPassword);
+			keyManagerFactory.init(keyStore, (keyPassword != null) ? keyPassword.toCharArray() : null);
 			return keyManagerFactory;
 		}
 		catch (Exception ex) {
@@ -132,7 +138,7 @@ public class SslServerCustomizer implements NettyServerCustomizer {
 				ssl.getKeyStorePassword());
 	}
 
-	protected TrustManagerFactory getTrustManagerFactory(Ssl ssl, SslStoreProvider sslStoreProvider) {
+	TrustManagerFactory getTrustManagerFactory(Ssl ssl, SslStoreProvider sslStoreProvider) {
 		try {
 			KeyStore store = getTrustStore(ssl, sslStoreProvider);
 			TrustManagerFactory trustManagerFactory = TrustManagerFactory
@@ -165,18 +171,29 @@ public class SslServerCustomizer implements NettyServerCustomizer {
 		return loadStore(type, provider, resource, password);
 	}
 
-	private KeyStore loadStore(String type, String provider, String resource, String password) throws Exception {
-		type = (type != null) ? type : "JKS";
-		KeyStore store = (provider != null) ? KeyStore.getInstance(type, provider) : KeyStore.getInstance(type);
-		try {
-			URL url = ResourceUtils.getURL(resource);
-			store.load(url.openStream(), (password != null) ? password.toCharArray() : null);
-			return store;
+	private KeyStore loadStore(String keystoreType, String provider, String keystoreLocation, String password)
+			throws Exception {
+		keystoreType = (keystoreType != null) ? keystoreType : "JKS";
+		char[] passwordChars = (password != null) ? password.toCharArray() : null;
+		KeyStore store = (provider != null) ? KeyStore.getInstance(keystoreType, provider)
+				: KeyStore.getInstance(keystoreType);
+		if (keystoreType.equalsIgnoreCase("PKCS11")) {
+			Assert.state(!StringUtils.hasText(keystoreLocation),
+					() -> "Keystore location '" + keystoreLocation + "' must be empty or null for PKCS11 key stores");
+			store.load(null, passwordChars);
 		}
-		catch (Exception ex) {
-			throw new WebServerException("Could not load key store '" + resource + "'", ex);
+		else {
+			try {
+				URL url = ResourceUtils.getURL(keystoreLocation);
+				try (InputStream stream = url.openStream()) {
+					store.load(stream, passwordChars);
+				}
+			}
+			catch (Exception ex) {
+				throw new WebServerException("Could not load key store '" + keystoreLocation + "'", ex);
+			}
 		}
-
+		return store;
 	}
 
 	/**

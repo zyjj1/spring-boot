@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ import org.junit.jupiter.api.TestTemplate;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.springframework.boot.gradle.junit.GradleMultiDslExtension;
-import org.springframework.boot.gradle.testkit.GradleBuild;
+import org.springframework.boot.testsupport.gradle.testkit.GradleBuild;
 import org.springframework.util.FileCopyUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -252,7 +252,7 @@ class PackagingDocumentationTests {
 	void bootBuildImageWithCustomBuildpackJvmVersion() {
 		BuildResult result = this.gradleBuild.script("src/docs/gradle/packaging/boot-build-image-env")
 				.build("bootBuildImageEnvironment");
-		assertThat(result.getOutput()).contains("BP_JVM_VERSION=8.*");
+		assertThat(result.getOutput()).contains("BP_JVM_VERSION=17");
 	}
 
 	@TestTemplate
@@ -264,6 +264,14 @@ class PackagingDocumentationTests {
 	}
 
 	@TestTemplate
+	void bootBuildImageWithCustomRuntimeConfiguration() {
+		BuildResult result = this.gradleBuild.script("src/docs/gradle/packaging/boot-build-image-env-runtime")
+				.build("bootBuildImageEnvironment");
+		assertThat(result.getOutput()).contains("BPE_DELIM_JAVA_TOOL_OPTIONS= ")
+				.contains("BPE_APPEND_JAVA_TOOL_OPTIONS=-XX:+HeapDumpOnOutOfMemoryError");
+	}
+
+	@TestTemplate
 	void bootBuildImageWithCustomImageName() {
 		BuildResult result = this.gradleBuild.script("src/docs/gradle/packaging/boot-build-image-name")
 				.build("bootBuildImageName");
@@ -271,11 +279,19 @@ class PackagingDocumentationTests {
 	}
 
 	@TestTemplate
-	void bootBuildImageWithDockerHost() {
+	void bootBuildImageWithDockerHostMinikube() {
 		BuildResult result = this.gradleBuild.script("src/docs/gradle/packaging/boot-build-image-docker-host")
 				.build("bootBuildImageDocker");
 		assertThat(result.getOutput()).contains("host=tcp://192.168.99.100:2376").contains("tlsVerify=true")
-				.contains("certPath=/home/users/.minikube/certs");
+				.contains("certPath=/home/user/.minikube/certs");
+	}
+
+	@TestTemplate
+	void bootBuildImageWithDockerHostPodman() {
+		BuildResult result = this.gradleBuild.script("src/docs/gradle/packaging/boot-build-image-docker-host-podman")
+				.build("bootBuildImageDocker");
+		assertThat(result.getOutput()).contains("host=unix:///run/user/1000/podman/podman.sock")
+				.contains("bindHostToBuilder=true");
 	}
 
 	@TestTemplate
@@ -306,6 +322,14 @@ class PackagingDocumentationTests {
 				.build("bootBuildImageBuildpacks");
 		assertThat(result.getOutput()).contains("file:///path/to/example-buildpack.tgz")
 				.contains("urn:cnb:builder:paketo-buildpacks/java");
+	}
+
+	@TestTemplate
+	void bootBuildImageWithCaches() {
+		BuildResult result = this.gradleBuild.script("src/docs/gradle/packaging/boot-build-image-caches")
+				.build("bootBuildImageCaches");
+		assertThat(result.getOutput()).containsPattern("buildCache=cache-gradle-[\\d]+.build")
+				.containsPattern("launchCache=cache-gradle-[\\d]+.launch");
 	}
 
 	protected void jarFile(File file) throws IOException {

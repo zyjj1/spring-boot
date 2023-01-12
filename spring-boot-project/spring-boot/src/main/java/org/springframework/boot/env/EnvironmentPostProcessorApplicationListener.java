@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 package org.springframework.boot.env;
 
 import java.util.List;
+import java.util.function.Function;
 
 import org.springframework.boot.ConfigurableBootstrapContext;
 import org.springframework.boot.SpringApplication;
@@ -28,6 +29,7 @@ import org.springframework.context.ApplicationEvent;
 import org.springframework.context.event.SmartApplicationListener;
 import org.springframework.core.Ordered;
 import org.springframework.core.env.ConfigurableEnvironment;
+import org.springframework.core.io.ResourceLoader;
 
 /**
  * {@link SmartApplicationListener} used to trigger {@link EnvironmentPostProcessor
@@ -47,15 +49,14 @@ public class EnvironmentPostProcessorApplicationListener implements SmartApplica
 
 	private int order = DEFAULT_ORDER;
 
-	private final EnvironmentPostProcessorsFactory postProcessorsFactory;
+	private final Function<ClassLoader, EnvironmentPostProcessorsFactory> postProcessorsFactory;
 
 	/**
 	 * Create a new {@link EnvironmentPostProcessorApplicationListener} with
 	 * {@link EnvironmentPostProcessor} classes loaded via {@code spring.factories}.
 	 */
 	public EnvironmentPostProcessorApplicationListener() {
-		this(EnvironmentPostProcessorsFactory
-				.fromSpringFactories(EnvironmentPostProcessorApplicationListener.class.getClassLoader()));
+		this(EnvironmentPostProcessorsFactory::fromSpringFactories);
 	}
 
 	/**
@@ -63,14 +64,21 @@ public class EnvironmentPostProcessorApplicationListener implements SmartApplica
 	 * processors created by the given factory.
 	 * @param postProcessorsFactory the post processors factory
 	 */
-	public EnvironmentPostProcessorApplicationListener(EnvironmentPostProcessorsFactory postProcessorsFactory) {
-		this(postProcessorsFactory, new DeferredLogs());
+	private EnvironmentPostProcessorApplicationListener(
+			Function<ClassLoader, EnvironmentPostProcessorsFactory> postProcessorsFactory) {
+		this.postProcessorsFactory = postProcessorsFactory;
+		this.deferredLogs = new DeferredLogs();
 	}
 
-	EnvironmentPostProcessorApplicationListener(EnvironmentPostProcessorsFactory postProcessorsFactory,
-			DeferredLogs deferredLogs) {
-		this.postProcessorsFactory = postProcessorsFactory;
-		this.deferredLogs = deferredLogs;
+	/**
+	 * Factory method that creates an {@link EnvironmentPostProcessorApplicationListener}
+	 * with a specific {@link EnvironmentPostProcessorsFactory}.
+	 * @param postProcessorsFactory the environment post processor factory
+	 * @return an {@link EnvironmentPostProcessorApplicationListener} instance
+	 */
+	public static EnvironmentPostProcessorApplicationListener with(
+			EnvironmentPostProcessorsFactory postProcessorsFactory) {
+		return new EnvironmentPostProcessorApplicationListener((classloader) -> postProcessorsFactory);
 	}
 
 	@Override
@@ -82,30 +90,31 @@ public class EnvironmentPostProcessorApplicationListener implements SmartApplica
 
 	@Override
 	public void onApplicationEvent(ApplicationEvent event) {
-		if (event instanceof ApplicationEnvironmentPreparedEvent) {
-			onApplicationEnvironmentPreparedEvent((ApplicationEnvironmentPreparedEvent) event);
+		if (event instanceof ApplicationEnvironmentPreparedEvent environmentPreparedEvent) {
+			onApplicationEnvironmentPreparedEvent(environmentPreparedEvent);
 		}
 		if (event instanceof ApplicationPreparedEvent) {
-			onApplicationPreparedEvent((ApplicationPreparedEvent) event);
+			onApplicationPreparedEvent();
 		}
 		if (event instanceof ApplicationFailedEvent) {
-			onApplicationFailedEvent((ApplicationFailedEvent) event);
+			onApplicationFailedEvent();
 		}
 	}
 
 	private void onApplicationEnvironmentPreparedEvent(ApplicationEnvironmentPreparedEvent event) {
 		ConfigurableEnvironment environment = event.getEnvironment();
 		SpringApplication application = event.getSpringApplication();
-		for (EnvironmentPostProcessor postProcessor : getEnvironmentPostProcessors(event.getBootstrapContext())) {
+		for (EnvironmentPostProcessor postProcessor : getEnvironmentPostProcessors(application.getResourceLoader(),
+				event.getBootstrapContext())) {
 			postProcessor.postProcessEnvironment(environment, application);
 		}
 	}
 
-	private void onApplicationPreparedEvent(ApplicationPreparedEvent event) {
+	private void onApplicationPreparedEvent() {
 		finish();
 	}
 
-	private void onApplicationFailedEvent(ApplicationFailedEvent event) {
+	private void onApplicationFailedEvent() {
 		finish();
 	}
 
@@ -113,8 +122,11 @@ public class EnvironmentPostProcessorApplicationListener implements SmartApplica
 		this.deferredLogs.switchOverAll();
 	}
 
-	List<EnvironmentPostProcessor> getEnvironmentPostProcessors(ConfigurableBootstrapContext bootstrapContext) {
-		return this.postProcessorsFactory.getEnvironmentPostProcessors(this.deferredLogs, bootstrapContext);
+	List<EnvironmentPostProcessor> getEnvironmentPostProcessors(ResourceLoader resourceLoader,
+			ConfigurableBootstrapContext bootstrapContext) {
+		ClassLoader classLoader = (resourceLoader != null) ? resourceLoader.getClassLoader() : null;
+		EnvironmentPostProcessorsFactory postProcessorsFactory = this.postProcessorsFactory.apply(classLoader);
+		return postProcessorsFactory.getEnvironmentPostProcessors(this.deferredLogs, bootstrapContext);
 	}
 
 	@Override

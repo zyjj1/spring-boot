@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,12 +22,10 @@ import java.io.IOException;
 import java.io.PrintWriter;
 
 import org.junit.jupiter.api.TestTemplate;
-import org.junit.jupiter.api.condition.DisabledForJreRange;
-import org.junit.jupiter.api.condition.JRE;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.springframework.boot.gradle.junit.GradleMultiDslExtension;
-import org.springframework.boot.gradle.testkit.GradleBuild;
+import org.springframework.boot.testsupport.gradle.testkit.GradleBuild;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -43,7 +41,6 @@ class RunningDocumentationTests {
 	GradleBuild gradleBuild;
 
 	@TestTemplate
-	@DisabledForJreRange(min = JRE.JAVA_13)
 	void bootRunMain() throws IOException {
 		writeMainClass();
 		assertThat(this.gradleBuild.script("src/docs/gradle/running/boot-run-main").build("bootRun").getOutput())
@@ -65,25 +62,25 @@ class RunningDocumentationTests {
 	}
 
 	@TestTemplate
-	void bootRunSourceResources() throws IOException {
+	void bootRunSourceResources() {
 		assertThat(this.gradleBuild.script("src/docs/gradle/running/boot-run-source-resources")
 				.build("configuredClasspath").getOutput()).contains(new File("src/main/resources").getPath());
 	}
 
 	@TestTemplate
-	void bootRunDisableOptimizedLaunch() throws IOException {
+	void bootRunDisableOptimizedLaunch() {
 		assertThat(this.gradleBuild.script("src/docs/gradle/running/boot-run-disable-optimized-launch")
 				.build("optimizedLaunch").getOutput()).contains("false");
 	}
 
 	@TestTemplate
-	void bootRunSystemPropertyDefaultValue() throws IOException {
+	void bootRunSystemPropertyDefaultValue() {
 		assertThat(this.gradleBuild.script("src/docs/gradle/running/boot-run-system-property")
 				.build("configuredSystemProperties").getOutput()).contains("com.example.property = default");
 	}
 
 	@TestTemplate
-	void bootRunSystemPropetry() throws IOException {
+	void bootRunSystemProperty() {
 		assertThat(this.gradleBuild.script("src/docs/gradle/running/boot-run-system-property")
 				.build("-Pexample=custom", "configuredSystemProperties").getOutput())
 						.contains("com.example.property = custom");

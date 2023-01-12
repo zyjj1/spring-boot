@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,12 +24,13 @@ import java.util.function.Function;
 import io.r2dbc.pool.ConnectionPool;
 import io.r2dbc.pool.ConnectionPoolConfiguration;
 import io.r2dbc.pool.PoolingConnectionFactoryProvider;
+import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.ConnectionFactories;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.ConnectionFactoryOptions;
 import io.r2dbc.spi.ConnectionFactoryOptions.Builder;
 import io.r2dbc.spi.ValidationDepth;
-import io.r2dbc.spi.Wrapped;
+import org.reactivestreams.Publisher;
 
 import org.springframework.boot.context.properties.PropertyMapper;
 import org.springframework.util.Assert;
@@ -93,8 +94,9 @@ public final class ConnectionFactoryBuilder {
 	 * @param connectionFactory the connection factory whose options are to be used to
 	 * initialize the builder
 	 * @return a new builder initialized with the options from the connection factory
+	 * @since 2.5.1
 	 */
-	public static ConnectionFactoryBuilder derivefrom(ConnectionFactory connectionFactory) {
+	public static ConnectionFactoryBuilder derivedFrom(ConnectionFactory connectionFactory) {
 		ConnectionFactoryOptions options = extractOptionsIfPossible(connectionFactory);
 		if (options == null) {
 			throw new IllegalArgumentException(
@@ -104,14 +106,9 @@ public final class ConnectionFactoryBuilder {
 	}
 
 	private static ConnectionFactoryOptions extractOptionsIfPossible(ConnectionFactory connectionFactory) {
-		if (connectionFactory instanceof OptionsCapableConnectionFactory) {
-			return ((OptionsCapableConnectionFactory) connectionFactory).getOptions();
-		}
-		if (connectionFactory instanceof Wrapped) {
-			Object unwrapped = ((Wrapped<?>) connectionFactory).unwrap();
-			if (unwrapped instanceof ConnectionFactory) {
-				return extractOptionsIfPossible((ConnectionFactory) unwrapped);
-			}
+		OptionsCapableConnectionFactory optionsCapable = OptionsCapableConnectionFactory.unwrapFrom(connectionFactory);
+		if (optionsCapable != null) {
+			return optionsCapable.getOptions();
 		}
 		return null;
 	}
@@ -214,45 +211,59 @@ public final class ConnectionFactoryBuilder {
 		}
 
 		private ConnectionFactoryOptions delegateFactoryOptions(ConnectionFactoryOptions options) {
-			String protocol = options.getRequiredValue(ConnectionFactoryOptions.PROTOCOL);
+			String protocol = toString(options.getRequiredValue(ConnectionFactoryOptions.PROTOCOL));
 			if (protocol.trim().length() == 0) {
 				throw new IllegalArgumentException(String.format("Protocol %s is not valid.", protocol));
 			}
 			String[] protocols = protocol.split(COLON, 2);
 			String driverDelegate = protocols[0];
 			String protocolDelegate = (protocols.length != 2) ? "" : protocols[1];
-			ConnectionFactoryOptions newOptions = ConnectionFactoryOptions.builder().from(options)
+			return ConnectionFactoryOptions.builder().from(options)
 					.option(ConnectionFactoryOptions.DRIVER, driverDelegate)
 					.option(ConnectionFactoryOptions.PROTOCOL, protocolDelegate).build();
-			return newOptions;
 		}
 
+		@SuppressWarnings("unchecked")
 		ConnectionPoolConfiguration connectionPoolConfiguration(ConnectionFactoryOptions options,
 				ConnectionFactory connectionFactory) {
 			ConnectionPoolConfiguration.Builder builder = ConnectionPoolConfiguration.builder(connectionFactory);
 			PropertyMapper map = PropertyMapper.get().alwaysApplyingWhenNonNull();
-			map.from((Object) options.getValue(PoolingConnectionFactoryProvider.INITIAL_SIZE)).as(this::toInteger)
+			map.from(options.getValue(PoolingConnectionFactoryProvider.BACKGROUND_EVICTION_INTERVAL))
+					.as(this::toDuration).to(builder::backgroundEvictionInterval);
+			map.from(options.getValue(PoolingConnectionFactoryProvider.INITIAL_SIZE)).as(this::toInteger)
 					.to(builder::initialSize);
-			map.from((Object) options.getValue(PoolingConnectionFactoryProvider.MAX_SIZE)).as(this::toInteger)
+			map.from(options.getValue(PoolingConnectionFactoryProvider.MAX_SIZE)).as(this::toInteger)
 					.to(builder::maxSize);
-			map.from((Object) options.getValue(PoolingConnectionFactoryProvider.ACQUIRE_RETRY)).as(this::toInteger)
+			map.from(options.getValue(PoolingConnectionFactoryProvider.ACQUIRE_RETRY)).as(this::toInteger)
 					.to(builder::acquireRetry);
-			map.from((Object) options.getValue(PoolingConnectionFactoryProvider.MAX_LIFE_TIME)).as(this::toDuration)
+			map.from(options.getValue(PoolingConnectionFactoryProvider.MAX_LIFE_TIME)).as(this::toDuration)
 					.to(builder::maxLifeTime);
-			map.from((Object) options.getValue(PoolingConnectionFactoryProvider.MAX_ACQUIRE_TIME)).as(this::toDuration)
+			map.from(options.getValue(PoolingConnectionFactoryProvider.MAX_ACQUIRE_TIME)).as(this::toDuration)
 					.to(builder::maxAcquireTime);
-			map.from((Object) options.getValue(PoolingConnectionFactoryProvider.MAX_IDLE_TIME)).as(this::toDuration)
+			map.from(options.getValue(PoolingConnectionFactoryProvider.MAX_IDLE_TIME)).as(this::toDuration)
 					.to(builder::maxIdleTime);
-			map.from((Object) options.getValue(PoolingConnectionFactoryProvider.MAX_CREATE_CONNECTION_TIME))
-					.as(this::toDuration).to(builder::maxCreateConnectionTime);
-			map.from(options.getValue(PoolingConnectionFactoryProvider.POOL_NAME)).to(builder::name);
-			map.from((Object) options.getValue(PoolingConnectionFactoryProvider.REGISTER_JMX)).as(this::toBoolean)
+			map.from(options.getValue(PoolingConnectionFactoryProvider.MAX_CREATE_CONNECTION_TIME)).as(this::toDuration)
+					.to(builder::maxCreateConnectionTime);
+			map.from(options.getValue(PoolingConnectionFactoryProvider.MAX_VALIDATION_TIME)).as(this::toDuration)
+					.to(builder::maxValidationTime);
+			map.from(options.getValue(PoolingConnectionFactoryProvider.MIN_IDLE)).as(this::toInteger)
+					.to(builder::minIdle);
+			map.from(options.getValue(PoolingConnectionFactoryProvider.POOL_NAME)).as(this::toString).to(builder::name);
+			map.from(options.getValue(PoolingConnectionFactoryProvider.PRE_RELEASE)).to((function) -> builder
+					.preRelease((Function<? super Connection, ? extends Publisher<Void>>) function));
+			map.from(options.getValue(PoolingConnectionFactoryProvider.POST_ALLOCATE)).to((function) -> builder
+					.postAllocate((Function<? super Connection, ? extends Publisher<Void>>) function));
+			map.from(options.getValue(PoolingConnectionFactoryProvider.REGISTER_JMX)).as(this::toBoolean)
 					.to(builder::registerJmx);
-			map.from(options.getValue(PoolingConnectionFactoryProvider.VALIDATION_QUERY)).to(builder::validationQuery);
-			map.from((Object) options.getValue(PoolingConnectionFactoryProvider.VALIDATION_DEPTH))
-					.as(this::toValidationDepth).to(builder::validationDepth);
-			ConnectionPoolConfiguration build = builder.build();
-			return build;
+			map.from(options.getValue(PoolingConnectionFactoryProvider.VALIDATION_QUERY)).as(this::toString)
+					.to(builder::validationQuery);
+			map.from(options.getValue(PoolingConnectionFactoryProvider.VALIDATION_DEPTH)).as(this::toValidationDepth)
+					.to(builder::validationDepth);
+			return builder.build();
+		}
+
+		private String toString(Object object) {
+			return toType(String.class, object, String::valueOf);
 		}
 
 		private Integer toInteger(Object object) {
@@ -276,8 +287,8 @@ public final class ConnectionFactoryBuilder {
 			if (type.isInstance(object)) {
 				return type.cast(object);
 			}
-			if (object instanceof String) {
-				return converter.apply((String) object);
+			if (object instanceof String string) {
+				return converter.apply(string);
 			}
 			throw new IllegalArgumentException("Cannot convert '" + object + "' to " + type.getName());
 		}

@@ -87,13 +87,13 @@ public class RootUriTemplateHandler implements UriTemplateHandler {
 
 	/**
 	 * Derives a new {@code RootUriTemplateHandler} from this one, wrapping its delegate
-	 * {link UriTemplateHandler} by applying the given {@code wrapper}.
+	 * {@link UriTemplateHandler} by applying the given {@code wrapper}.
 	 * @param wrapper the wrapper to apply to the delegate URI template handler
 	 * @return the new handler
 	 * @since 2.3.10
 	 */
 	public RootUriTemplateHandler withHandlerWrapper(Function<UriTemplateHandler, UriTemplateHandler> wrapper) {
-		return new RootUriTemplateHandler(this.rootUri, wrapper.apply(this.handler));
+		return new RootUriTemplateHandler(getRootUri(), wrapper.apply(this.handler));
 	}
 
 	/**

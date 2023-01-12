@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,9 +21,8 @@ import java.util.EnumSet;
 import java.util.Locale;
 import java.util.Map;
 
-import javax.servlet.DispatcherType;
-import javax.servlet.http.HttpServletRequest;
-
+import jakarta.servlet.DispatcherType;
+import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -120,7 +119,7 @@ class FreeMarkerAutoConfigurationServletIntegrationTests {
 	@Test
 	void disableCache() {
 		load("spring.freemarker.cache:false");
-		assertThat(this.context.getBean(FreeMarkerViewResolver.class).getCacheLimit()).isEqualTo(0);
+		assertThat(this.context.getBean(FreeMarkerViewResolver.class).getCacheLimit()).isZero();
 	}
 
 	@Test
@@ -155,7 +154,7 @@ class FreeMarkerAutoConfigurationServletIntegrationTests {
 
 	@Test
 	void registerResourceHandlingFilterOnlyIfResourceChainIsEnabled() {
-		load("spring.resources.chain.enabled:true");
+		load("spring.web.resources.chain.enabled:true");
 		FilterRegistrationBean<?> registration = this.context.getBean(FilterRegistrationBean.class);
 		assertThat(registration.getFilter()).isInstanceOf(ResourceUrlEncodingFilter.class);
 		assertThat(registration).hasFieldOrPropertyWithValue("dispatcherTypes",
@@ -166,7 +165,7 @@ class FreeMarkerAutoConfigurationServletIntegrationTests {
 	@SuppressWarnings("rawtypes")
 	void registerResourceHandlingFilterWithOtherRegistrationBean() {
 		// gh-14897
-		load(FilterRegistrationOtherConfiguration.class, "spring.resources.chain.enabled:true");
+		load(FilterRegistrationOtherConfiguration.class, "spring.web.resources.chain.enabled:true");
 		Map<String, FilterRegistrationBean> beans = this.context.getBeansOfType(FilterRegistrationBean.class);
 		assertThat(beans).hasSize(2);
 		FilterRegistrationBean registration = beans.values().stream()
@@ -179,7 +178,7 @@ class FreeMarkerAutoConfigurationServletIntegrationTests {
 	@SuppressWarnings("rawtypes")
 	void registerResourceHandlingFilterWithResourceRegistrationBean() {
 		// gh-14926
-		load(FilterRegistrationResourceConfiguration.class, "spring.resources.chain.enabled:true");
+		load(FilterRegistrationResourceConfiguration.class, "spring.web.resources.chain.enabled:true");
 		Map<String, FilterRegistrationBean> beans = this.context.getBeansOfType(FilterRegistrationBean.class);
 		assertThat(beans).hasSize(1);
 		FilterRegistrationBean registration = beans.values().stream()

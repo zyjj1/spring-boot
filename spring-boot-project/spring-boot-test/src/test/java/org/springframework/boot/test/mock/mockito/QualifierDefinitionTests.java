@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ import org.springframework.util.ReflectionUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.verify;
+import static org.mockito.BDDMockito.then;
 
 /**
  * Tests for {@link QualifierDefinition}.
@@ -81,7 +81,7 @@ class QualifierDefinitionTests {
 		Field field = ReflectionUtils.findField(ConfigA.class, "directQualifier");
 		QualifierDefinition qualifierDefinition = QualifierDefinition.forElement(field);
 		qualifierDefinition.matches(this.beanFactory, "bean");
-		verify(this.beanFactory).isAutowireCandidate(eq("bean"), this.descriptorCaptor.capture());
+		then(this.beanFactory).should().isAutowireCandidate(eq("bean"), this.descriptorCaptor.capture());
 		assertThat(this.descriptorCaptor.getValue().getAnnotatedElement()).isEqualTo(field);
 	}
 
@@ -108,9 +108,9 @@ class QualifierDefinitionTests {
 				.forElement(ReflectionUtils.findField(ConfigA.class, "customQualifier"));
 		QualifierDefinition customQualifier2 = QualifierDefinition
 				.forElement(ReflectionUtils.findField(ConfigB.class, "customQualifier"));
-		assertThat(directQualifier1.hashCode()).isEqualTo(directQualifier2.hashCode());
-		assertThat(differentDirectQualifier1.hashCode()).isEqualTo(differentDirectQualifier2.hashCode());
-		assertThat(customQualifier1.hashCode()).isEqualTo(customQualifier2.hashCode());
+		assertThat(directQualifier1).hasSameHashCodeAs(directQualifier2);
+		assertThat(differentDirectQualifier1).hasSameHashCodeAs(differentDirectQualifier2);
+		assertThat(customQualifier1).hasSameHashCodeAs(customQualifier2);
 		assertThat(differentDirectQualifier1).isEqualTo(differentDirectQualifier1).isEqualTo(differentDirectQualifier2)
 				.isNotEqualTo(directQualifier2);
 		assertThat(directQualifier1).isEqualTo(directQualifier1).isEqualTo(directQualifier2)

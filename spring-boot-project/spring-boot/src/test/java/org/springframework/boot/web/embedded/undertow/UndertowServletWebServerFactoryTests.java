@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,13 +30,13 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLHandshakeException;
-import javax.servlet.ServletRegistration.Dynamic;
 
 import io.undertow.Undertow;
 import io.undertow.Undertow.Builder;
 import io.undertow.servlet.api.DeploymentInfo;
 import io.undertow.servlet.api.ServletContainer;
-import org.apache.http.HttpResponse;
+import jakarta.servlet.ServletRegistration.Dynamic;
+import org.apache.hc.core5.http.HttpResponse;
 import org.apache.jasper.servlet.JspServlet;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
@@ -177,12 +177,12 @@ class UndertowServletWebServerFactoryTests extends AbstractServletWebServerFacto
 	}
 
 	@Test
-	void accessLogCanBeEnabled() throws IOException, URISyntaxException, InterruptedException {
+	void accessLogCanBeEnabled() throws IOException, URISyntaxException {
 		testAccessLog(null, null, "access_log.log");
 	}
 
 	@Test
-	void accessLogCanBeCustomized() throws IOException, URISyntaxException, InterruptedException {
+	void accessLogCanBeCustomized() throws IOException, URISyntaxException {
 		testAccessLog("my_access.", "logz", "my_access.logz");
 	}
 
@@ -207,20 +207,19 @@ class UndertowServletWebServerFactoryTests extends AbstractServletWebServerFacto
 		assertThat(request.get()).isInstanceOf(HttpResponse.class);
 		Object rejectedResult = initiateGetRequest(port, "/").get();
 		assertThat(rejectedResult).isInstanceOf(HttpResponse.class);
-		assertThat(((HttpResponse) rejectedResult).getStatusLine().getStatusCode())
-				.isEqualTo(HttpStatus.SERVICE_UNAVAILABLE.value());
+		assertThat(((HttpResponse) rejectedResult).getCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE.value());
 		this.webServer.stop();
 	}
 
 	private void testAccessLog(String prefix, String suffix, String expectedFile)
-			throws IOException, URISyntaxException, InterruptedException {
+			throws IOException, URISyntaxException {
 		UndertowServletWebServerFactory factory = getFactory();
 		factory.setAccessLogEnabled(true);
 		factory.setAccessLogPrefix(prefix);
 		factory.setAccessLogSuffix(suffix);
 		File accessLogDirectory = this.tempDir;
 		factory.setAccessLogDirectory(accessLogDirectory);
-		assertThat(accessLogDirectory.listFiles()).isEmpty();
+		assertThat(accessLogDirectory).isEmptyDirectory();
 		this.webServer = factory.getWebServer(new ServletRegistrationBean<>(new ExampleServlet(), "/hello"));
 		this.webServer.start();
 		assertThat(getResponse(getLocalUrl("/hello"))).isEqualTo("Hello World");
@@ -236,7 +235,7 @@ class UndertowServletWebServerFactoryTests extends AbstractServletWebServerFacto
 	}
 
 	@Test
-	void sslRestrictedProtocolsEmptyCipherFailure() throws Exception {
+	void sslRestrictedProtocolsEmptyCipherFailure() {
 		assertThatIOException()
 				.isThrownBy(() -> testRestrictedSSLProtocolsAndCipherSuites(new String[] { "TLSv1.2" },
 						new String[] { "TLS_EMPTY_RENEGOTIATION_INFO_SCSV" }))
@@ -244,7 +243,7 @@ class UndertowServletWebServerFactoryTests extends AbstractServletWebServerFacto
 	}
 
 	@Test
-	void sslRestrictedProtocolsECDHETLS1Failure() throws Exception {
+	void sslRestrictedProtocolsECDHETLS1Failure() {
 		assertThatIOException()
 				.isThrownBy(() -> testRestrictedSSLProtocolsAndCipherSuites(new String[] { "TLSv1" },
 						new String[] { "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256" }))
@@ -264,7 +263,7 @@ class UndertowServletWebServerFactoryTests extends AbstractServletWebServerFacto
 	}
 
 	@Test
-	void sslRestrictedProtocolsRSATLS11Failure() throws Exception {
+	void sslRestrictedProtocolsRSATLS11Failure() {
 		assertThatIOException()
 				.isThrownBy(() -> testRestrictedSSLProtocolsAndCipherSuites(new String[] { "TLSv1.1" },
 						new String[] { "TLS_RSA_WITH_AES_128_CBC_SHA256" }))

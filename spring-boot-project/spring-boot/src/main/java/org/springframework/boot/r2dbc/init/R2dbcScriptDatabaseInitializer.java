@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,10 @@
 
 package org.springframework.boot.r2dbc.init;
 
-import java.nio.charset.Charset;
-import java.util.List;
-
 import io.r2dbc.spi.ConnectionFactory;
 
 import org.springframework.beans.factory.InitializingBean;
+import org.springframework.boot.r2dbc.EmbeddedDatabaseConnection;
 import org.springframework.boot.sql.init.AbstractScriptDatabaseInitializer;
 import org.springframework.boot.sql.init.DatabaseInitializationSettings;
 import org.springframework.core.io.Resource;
@@ -52,12 +50,17 @@ public class R2dbcScriptDatabaseInitializer extends AbstractScriptDatabaseInitia
 	}
 
 	@Override
-	protected void runScripts(List<Resource> scripts, boolean continueOnError, String separator, Charset encoding) {
+	protected boolean isEmbeddedDatabase() {
+		return EmbeddedDatabaseConnection.isEmbedded(this.connectionFactory);
+	}
+
+	@Override
+	protected void runScripts(Scripts scripts) {
 		ResourceDatabasePopulator populator = new ResourceDatabasePopulator();
-		populator.setContinueOnError(continueOnError);
-		populator.setSeparator(separator);
-		if (encoding != null) {
-			populator.setSqlScriptEncoding(encoding.name());
+		populator.setContinueOnError(scripts.isContinueOnError());
+		populator.setSeparator(scripts.getSeparator());
+		if (scripts.getEncoding() != null) {
+			populator.setSqlScriptEncoding(scripts.getEncoding().name());
 		}
 		for (Resource script : scripts) {
 			populator.addScript(script);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2020 the original author or authors.
+ * Copyright 2012-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ import org.gradle.api.tasks.bundling.Jar;
 import org.springframework.boot.build.ConventionsPlugin;
 import org.springframework.boot.build.DeployedPlugin;
 import org.springframework.boot.build.classpath.CheckClasspathForConflicts;
-import org.springframework.boot.build.classpath.CheckClasspathForProhibitedDependencies;
+import org.springframework.boot.build.classpath.CheckClasspathForUnnecessaryExclusions;
 import org.springframework.util.StringUtils;
 
 /**
@@ -61,7 +61,7 @@ public class StarterPlugin implements Plugin<Project> {
 		project.getArtifacts().add("starterMetadata", project.provider(starterMetadata::getDestination),
 				(artifact) -> artifact.builtBy(starterMetadata));
 		createClasspathConflictsCheck(runtimeClasspath, project);
-		createProhibitedDependenciesCheck(runtimeClasspath, project);
+		createUnnecessaryExclusionsCheck(runtimeClasspath, project);
 		configureJarManifest(project);
 	}
 
@@ -73,12 +73,12 @@ public class StarterPlugin implements Plugin<Project> {
 		project.getTasks().getByName(JavaBasePlugin.CHECK_TASK_NAME).dependsOn(checkClasspathForConflicts);
 	}
 
-	private void createProhibitedDependenciesCheck(Configuration classpath, Project project) {
-		CheckClasspathForProhibitedDependencies checkClasspathForProhibitedDependencies = project.getTasks().create(
-				"check" + StringUtils.capitalize(classpath.getName() + "ForProhibitedDependencies"),
-				CheckClasspathForProhibitedDependencies.class);
-		checkClasspathForProhibitedDependencies.setClasspath(classpath);
-		project.getTasks().getByName(JavaBasePlugin.CHECK_TASK_NAME).dependsOn(checkClasspathForProhibitedDependencies);
+	private void createUnnecessaryExclusionsCheck(Configuration classpath, Project project) {
+		CheckClasspathForUnnecessaryExclusions checkClasspathForUnnecessaryExclusions = project.getTasks().create(
+				"check" + StringUtils.capitalize(classpath.getName() + "ForUnnecessaryExclusions"),
+				CheckClasspathForUnnecessaryExclusions.class);
+		checkClasspathForUnnecessaryExclusions.setClasspath(classpath);
+		project.getTasks().getByName(JavaBasePlugin.CHECK_TASK_NAME).dependsOn(checkClasspathForUnnecessaryExclusions);
 	}
 
 	private void configureJarManifest(Project project) {

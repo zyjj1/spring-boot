@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ import org.springframework.boot.configurationsample.simple.DescriptionProperties
 import org.springframework.boot.configurationsample.simple.HierarchicalProperties;
 import org.springframework.boot.configurationsample.simple.HierarchicalPropertiesGrandparent;
 import org.springframework.boot.configurationsample.simple.HierarchicalPropertiesParent;
+import org.springframework.boot.configurationsample.simple.InnerClassWithPrivateConstructor;
 import org.springframework.boot.configurationsample.simple.NotAnnotated;
 import org.springframework.boot.configurationsample.simple.SimpleArrayProperties;
 import org.springframework.boot.configurationsample.simple.SimpleCollectionProperties;
@@ -54,9 +55,10 @@ import org.springframework.boot.configurationsample.specific.InvalidDefaultValue
 import org.springframework.boot.configurationsample.specific.InvalidDoubleRegistrationProperties;
 import org.springframework.boot.configurationsample.specific.SimplePojo;
 import org.springframework.boot.configurationsample.specific.StaticAccessor;
+import org.springframework.core.test.tools.CompilationException;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
 /**
  * Tests for {@link ConfigurationMetadataAnnotationProcessor}.
@@ -66,13 +68,16 @@ import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
  * @author Andy Wilkinson
  * @author Kris De Volder
  * @author Jonas Keßler
+ * @author Pavel Anisimov
+ * @author Scott Frederick
  */
 class ConfigurationMetadataAnnotationProcessorTests extends AbstractMetadataGenerationTests {
 
 	@Test
 	void supportedAnnotations() {
 		assertThat(new ConfigurationMetadataAnnotationProcessor().getSupportedAnnotationTypes())
-				.containsExactlyInAnyOrder("org.springframework.boot.context.properties.ConfigurationProperties",
+				.containsExactlyInAnyOrder("org.springframework.boot.autoconfigure.AutoConfiguration",
+						"org.springframework.boot.context.properties.ConfigurationProperties",
 						"org.springframework.context.annotation.Configuration",
 						"org.springframework.boot.actuate.endpoint.annotation.Endpoint",
 						"org.springframework.boot.actuate.endpoint.jmx.annotation.JmxEndpoint",
@@ -136,7 +141,7 @@ class ConfigurationMetadataAnnotationProcessorTests extends AbstractMetadataGene
 		assertThat(metadata).has(Metadata.withProperty("simple.type.my-primitive-double", Double.class));
 		assertThat(metadata).has(Metadata.withProperty("simple.type.my-float", Float.class));
 		assertThat(metadata).has(Metadata.withProperty("simple.type.my-primitive-float", Float.class));
-		assertThat(metadata.getItems().size()).isEqualTo(18);
+		assertThat(metadata.getItems()).hasSize(18);
 	}
 
 	@Test
@@ -243,7 +248,7 @@ class ConfigurationMetadataAnnotationProcessorTests extends AbstractMetadataGene
 	}
 
 	@Test
-	void parseArrayConfig() throws Exception {
+	void parseArrayConfig() {
 		ConfigurationMetadata metadata = compile(SimpleArrayProperties.class);
 		assertThat(metadata).has(Metadata.withGroup("array").ofType(SimpleArrayProperties.class));
 		assertThat(metadata).has(Metadata.withProperty("array.primitive", "java.lang.Integer[]"));
@@ -366,26 +371,30 @@ class ConfigurationMetadataAnnotationProcessorTests extends AbstractMetadataGene
 
 	@Test
 	void invalidDoubleRegistration() {
-		assertThatIllegalStateException().isThrownBy(() -> compile(InvalidDoubleRegistrationProperties.class))
-				.withMessageContaining("Compilation failed");
+		assertThatExceptionOfType(CompilationException.class)
+				.isThrownBy(() -> compile(InvalidDoubleRegistrationProperties.class))
+				.withMessageContaining("Unable to compile source");
 	}
 
 	@Test
 	void constructorParameterPropertyWithInvalidDefaultValueOnNumber() {
-		assertThatIllegalStateException().isThrownBy(() -> compile(InvalidDefaultValueNumberProperties.class))
-				.withMessageContaining("Compilation failed");
+		assertThatExceptionOfType(CompilationException.class)
+				.isThrownBy(() -> compile(InvalidDefaultValueNumberProperties.class))
+				.withMessageContaining("Unable to compile source");
 	}
 
 	@Test
 	void constructorParameterPropertyWithInvalidDefaultValueOnFloatingPoint() {
-		assertThatIllegalStateException().isThrownBy(() -> compile(InvalidDefaultValueFloatingPointProperties.class))
-				.withMessageContaining("Compilation failed");
+		assertThatExceptionOfType(CompilationException.class)
+				.isThrownBy(() -> compile(InvalidDefaultValueFloatingPointProperties.class))
+				.withMessageContaining("Unable to compile source");
 	}
 
 	@Test
 	void constructorParameterPropertyWithInvalidDefaultValueOnCharacter() {
-		assertThatIllegalStateException().isThrownBy(() -> compile(InvalidDefaultValueCharacterProperties.class))
-				.withMessageContaining("Compilation failed");
+		assertThatExceptionOfType(CompilationException.class)
+				.isThrownBy(() -> compile(InvalidDefaultValueCharacterProperties.class))
+				.withMessageContaining("Unable to compile source");
 	}
 
 	@Test
@@ -400,6 +409,60 @@ class ConfigurationMetadataAnnotationProcessorTests extends AbstractMetadataGene
 	@Test
 	void recursivePropertiesDoNotCauseAStackOverflow() {
 		compile(RecursiveProperties.class);
+	}
+
+	@Test
+	void recordProperties() {
+		String source = """
+				@org.springframework.boot.configurationsample.ConfigurationProperties("implicit")
+				public record ExampleRecord(String someString, Integer someInteger) {
+				}
+				""";
+		ConfigurationMetadata metadata = compile(source);
+		assertThat(metadata).has(Metadata.withProperty("implicit.some-string"));
+		assertThat(metadata).has(Metadata.withProperty("implicit.some-integer"));
+	}
+
+	@Test
+	void recordPropertiesWithDefaultValues() {
+		String source = """
+				@org.springframework.boot.configurationsample.ConfigurationProperties("record.defaults")
+				public record ExampleRecord(
+					@org.springframework.boot.configurationsample.DefaultValue("An1s9n") String someString,
+					@org.springframework.boot.configurationsample.DefaultValue("594") Integer someInteger) {
+				}
+				""";
+		ConfigurationMetadata metadata = compile(source);
+		assertThat(metadata)
+				.has(Metadata.withProperty("record.defaults.some-string", String.class).withDefaultValue("An1s9n"));
+		assertThat(metadata)
+				.has(Metadata.withProperty("record.defaults.some-integer", Integer.class).withDefaultValue(594));
+	}
+
+	@Test
+	void multiConstructorRecordProperties() {
+		String source = """
+				@org.springframework.boot.configurationsample.ConfigurationProperties("multi")
+				public record ExampleRecord(String someString, Integer someInteger) {
+					@org.springframework.boot.configurationsample.ConstructorBinding
+					public ExampleRecord(String someString) {
+						this(someString, 42);
+					}
+					public ExampleRecord(Integer someInteger) {
+						this("someString", someInteger);
+					}
+				}
+				""";
+		ConfigurationMetadata metadata = compile(source);
+		assertThat(metadata).has(Metadata.withProperty("multi.some-string"));
+		assertThat(metadata).doesNotHave(Metadata.withProperty("multi.some-integer"));
+	}
+
+	@Test
+	void innerClassWithPrivateConstructor() {
+		ConfigurationMetadata metadata = compile(InnerClassWithPrivateConstructor.class);
+		assertThat(metadata).has(Metadata.withProperty("config.nested.name"));
+		assertThat(metadata).doesNotHave(Metadata.withProperty("config.nested.ignored"));
 	}
 
 }

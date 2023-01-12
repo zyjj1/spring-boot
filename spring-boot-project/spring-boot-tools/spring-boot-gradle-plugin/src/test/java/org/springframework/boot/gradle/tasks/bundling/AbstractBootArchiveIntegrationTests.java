@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,19 +41,16 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 
 import org.gradle.testkit.runner.BuildResult;
-import org.gradle.testkit.runner.InvalidRunnerConfigurationException;
 import org.gradle.testkit.runner.TaskOutcome;
-import org.gradle.testkit.runner.UnexpectedBuildFailure;
 import org.junit.jupiter.api.TestTemplate;
 
-import org.springframework.boot.gradle.testkit.GradleBuild;
 import org.springframework.boot.loader.tools.FileUtils;
 import org.springframework.boot.loader.tools.JarModeLibrary;
+import org.springframework.boot.testsupport.gradle.testkit.GradleBuild;
 import org.springframework.util.FileSystemUtils;
 import org.springframework.util.StringUtils;
 
@@ -86,14 +83,13 @@ abstract class AbstractBootArchiveIntegrationTests {
 	}
 
 	@TestTemplate
-	void basicBuild() throws InvalidRunnerConfigurationException, UnexpectedBuildFailure, IOException {
+	void basicBuild() {
 		assertThat(this.gradleBuild.build(this.taskName).task(":" + this.taskName).getOutcome())
 				.isEqualTo(TaskOutcome.SUCCESS);
 	}
 
 	@TestTemplate
-	void reproducibleArchive()
-			throws InvalidRunnerConfigurationException, UnexpectedBuildFailure, IOException, InterruptedException {
+	void reproducibleArchive() throws IOException, InterruptedException {
 		assertThat(this.gradleBuild.build(this.taskName).task(":" + this.taskName).getOutcome())
 				.isEqualTo(TaskOutcome.SUCCESS);
 		File jar = new File(this.gradleBuild.getProjectDir(), "build/libs").listFiles()[0];
@@ -106,7 +102,7 @@ abstract class AbstractBootArchiveIntegrationTests {
 	}
 
 	@TestTemplate
-	void upToDateWhenBuiltTwice() throws InvalidRunnerConfigurationException, UnexpectedBuildFailure, IOException {
+	void upToDateWhenBuiltTwice() {
 		assertThat(this.gradleBuild.build(this.taskName).task(":" + this.taskName).getOutcome())
 				.isEqualTo(TaskOutcome.SUCCESS);
 		assertThat(this.gradleBuild.build(this.taskName).task(":" + this.taskName).getOutcome())
@@ -114,8 +110,7 @@ abstract class AbstractBootArchiveIntegrationTests {
 	}
 
 	@TestTemplate
-	void upToDateWhenBuiltTwiceWithLaunchScriptIncluded()
-			throws InvalidRunnerConfigurationException, UnexpectedBuildFailure, IOException {
+	void upToDateWhenBuiltTwiceWithLaunchScriptIncluded() {
 		assertThat(this.gradleBuild.build("-PincludeLaunchScript=true", this.taskName).task(":" + this.taskName)
 				.getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
 		assertThat(this.gradleBuild.build("-PincludeLaunchScript=true", this.taskName).task(":" + this.taskName)
@@ -167,7 +162,7 @@ abstract class AbstractBootArchiveIntegrationTests {
 	}
 
 	@TestTemplate
-	void duplicatesAreHandledGracefully() throws IOException {
+	void duplicatesAreHandledGracefully() {
 		assertThat(this.gradleBuild.build(this.taskName).task(":" + this.taskName).getOutcome())
 				.isEqualTo(TaskOutcome.SUCCESS);
 	}
@@ -230,8 +225,7 @@ abstract class AbstractBootArchiveIntegrationTests {
 	}
 
 	@TestTemplate
-	void upToDateWhenBuiltWithDefaultLayeredAndThenWithExplicitLayered()
-			throws InvalidRunnerConfigurationException, UnexpectedBuildFailure {
+	void upToDateWhenBuiltWithDefaultLayeredAndThenWithExplicitLayered() {
 		assertThat(this.gradleBuild.scriptProperty("layered", "").build("" + this.taskName).task(":" + this.taskName)
 				.getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
 		assertThat(this.gradleBuild.scriptProperty("layered", "layered {}").build("" + this.taskName)
@@ -239,8 +233,7 @@ abstract class AbstractBootArchiveIntegrationTests {
 	}
 
 	@TestTemplate
-	void notUpToDateWhenBuiltWithoutLayersAndThenWithLayers()
-			throws InvalidRunnerConfigurationException, UnexpectedBuildFailure {
+	void notUpToDateWhenBuiltWithoutLayersAndThenWithLayers() {
 		assertThat(this.gradleBuild.scriptProperty("layerEnablement", "enabled = false").build(this.taskName)
 				.task(":" + this.taskName).getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
 		assertThat(this.gradleBuild.scriptProperty("layerEnablement", "enabled = true").build(this.taskName)
@@ -248,8 +241,7 @@ abstract class AbstractBootArchiveIntegrationTests {
 	}
 
 	@TestTemplate
-	void notUpToDateWhenBuiltWithLayerToolsAndThenWithoutLayerTools()
-			throws InvalidRunnerConfigurationException, UnexpectedBuildFailure {
+	void notUpToDateWhenBuiltWithLayerToolsAndThenWithoutLayerTools() {
 		assertThat(this.gradleBuild.scriptProperty("layerTools", "").build(this.taskName).task(":" + this.taskName)
 				.getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
 		assertThat(this.gradleBuild.scriptProperty("layerTools", "includeLayerTools = false").build(this.taskName)
@@ -257,7 +249,7 @@ abstract class AbstractBootArchiveIntegrationTests {
 	}
 
 	@TestTemplate
-	void layersWithCustomSourceSet() throws IOException {
+	void layersWithCustomSourceSet() {
 		assertThat(this.gradleBuild.build(this.taskName).task(":" + this.taskName).getOutcome())
 				.isEqualTo(TaskOutcome.SUCCESS);
 	}
@@ -462,6 +454,39 @@ abstract class AbstractBootArchiveIntegrationTests {
 		assertExtractedLayers(layerNames, indexedLayers);
 	}
 
+	@TestTemplate
+	void classesFromASecondarySourceSetCanBeIncludedInTheArchive() throws IOException {
+		writeMainClass();
+		File examplePackage = new File(this.gradleBuild.getProjectDir(), "src/secondary/java/example");
+		examplePackage.mkdirs();
+		File main = new File(examplePackage, "Secondary.java");
+		try (PrintWriter writer = new PrintWriter(new FileWriter(main))) {
+			writer.println("package example;");
+			writer.println();
+			writer.println("public class Secondary {}");
+		}
+		catch (IOException ex) {
+			throw new RuntimeException(ex);
+		}
+		BuildResult build = this.gradleBuild.build(this.taskName);
+		assertThat(build.task(":" + this.taskName).getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
+		try (JarFile jarFile = new JarFile(new File(this.gradleBuild.getProjectDir(), "build/libs").listFiles()[0])) {
+			Stream<String> classesEntryNames = jarFile.stream().filter((entry) -> !entry.isDirectory())
+					.map(JarEntry::getName).filter((name) -> name.startsWith(this.classesPath));
+			assertThat(classesEntryNames).containsExactly(this.classesPath + "example/Main.class",
+					this.classesPath + "example/Secondary.class");
+		}
+	}
+
+	@TestTemplate
+	void javaVersionIsSetInManifest() throws IOException {
+		BuildResult result = this.gradleBuild.build(this.taskName);
+		assertThat(result.task(":" + this.taskName).getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
+		try (JarFile jarFile = new JarFile(new File(this.gradleBuild.getProjectDir(), "build/libs").listFiles()[0])) {
+			assertThat(jarFile.getManifest().getMainAttributes().getValue("Build-Jdk-Spec")).isNotEmpty();
+		}
+	}
+
 	private void copyMainClassApplication() throws IOException {
 		copyApplication("main");
 	}
@@ -560,9 +585,12 @@ abstract class AbstractBootArchiveIntegrationTests {
 		for (String layerName : layerNames) {
 			File layer = new File(root, layerName);
 			assertThat(layer).isDirectory();
-			extractedLayers.put(layerName,
-					Files.walk(layer.toPath()).filter((path) -> path.toFile().isFile()).map(layer.toPath()::relativize)
-							.map(Path::toString).map(StringUtils::cleanPath).collect(Collectors.toList()));
+			List<String> files;
+			try (Stream<Path> pathStream = Files.walk(layer.toPath())) {
+				files = pathStream.filter((path) -> path.toFile().isFile()).map(layer.toPath()::relativize)
+						.map(Path::toString).map(StringUtils::cleanPath).toList();
+			}
+			extractedLayers.put(layerName, files);
 		}
 		return extractedLayers;
 	}

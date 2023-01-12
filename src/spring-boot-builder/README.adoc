@@ -5,11 +5,6 @@ This directory contains a Cloud Native Buildpacks https://buildpacks.io/docs/con
 == Creating the builder
 
 * Install the https://buildpacks.io/docs/install-pack/[pack CLI]
-* Authenticate to Docker Hub via `docker login` using the `springci` repository credentials
-* Use `pack` to create the builder image and publish it to Docker Hub:
+* Authenticate to projects.registry.vmware.com via `docker login`
+* Use the `build.sh` create the necessary images and push them to the registry
 
-[source,bash]
-----
-$ cd builder
-$ pack builder create springci/spring-boot-cnb-builder:0.0.1 --config builder.toml --publish
-----

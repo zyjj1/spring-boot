@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,14 +22,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import org.springframework.boot.ConfigurableBootstrapContext;
 import org.springframework.boot.DefaultBootstrapContext;
+import org.springframework.boot.MockApplicationEnvironment;
 import org.springframework.boot.context.config.ConfigDataEnvironmentContributor.ImportPhase;
 import org.springframework.boot.context.config.ConfigDataEnvironmentContributor.Kind;
 import org.springframework.boot.context.config.TestConfigDataEnvironmentUpdateListener.AddedPropertySource;
@@ -40,7 +42,6 @@ import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.PropertySource;
 import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.core.io.ResourceLoader;
-import org.springframework.mock.env.MockEnvironment;
 import org.springframework.mock.env.MockPropertySource;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -55,23 +56,15 @@ import static org.mockito.Mockito.mock;
  */
 class ConfigDataEnvironmentTests {
 
-	private DeferredLogFactory logFactory = Supplier::get;
+	private final DeferredLogFactory logFactory = Supplier::get;
 
-	private DefaultBootstrapContext bootstrapContext = new DefaultBootstrapContext();
+	private final DefaultBootstrapContext bootstrapContext = new DefaultBootstrapContext();
 
-	private MockEnvironment environment = new MockEnvironment();
+	private final MockApplicationEnvironment environment = new MockApplicationEnvironment();
 
-	private ResourceLoader resourceLoader = new DefaultResourceLoader();
+	private final ResourceLoader resourceLoader = new DefaultResourceLoader();
 
-	private Collection<String> additionalProfiles = Collections.emptyList();
-
-	@Test
-	void createWhenUseLegacyPropertyInEnvironmentThrowsException() {
-		this.environment.setProperty("spring.config.use-legacy-processing", "true");
-		assertThatExceptionOfType(UseLegacyConfigProcessingException.class)
-				.isThrownBy(() -> new ConfigDataEnvironment(this.logFactory, this.bootstrapContext, this.environment,
-						this.resourceLoader, this.additionalProfiles, null));
-	}
+	private final Collection<String> additionalProfiles = Collections.emptyList();
 
 	@Test
 	void createExposesEnvironmentBinderToConfigDataLocationResolvers() {
@@ -161,7 +154,7 @@ class ConfigDataEnvironmentTests {
 		ConfigDataEnvironment configDataEnvironment = new ConfigDataEnvironment(this.logFactory, this.bootstrapContext,
 				this.environment, this.resourceLoader, this.additionalProfiles, null);
 		configDataEnvironment.processAndApply();
-		List<PropertySource<?>> sources = this.environment.getPropertySources().stream().collect(Collectors.toList());
+		List<PropertySource<?>> sources = this.environment.getPropertySources().stream().toList();
 		assertThat(sources.get(sources.size() - 1)).isSameAs(defaultPropertySource);
 	}
 
@@ -216,6 +209,78 @@ class ConfigDataEnvironmentTests {
 		assertThat(this.environment.getActiveProfiles()).containsExactly("test");
 	}
 
+	@ParameterizedTest
+	@CsvSource({ "include", "include[0]" })
+	void processAndApplyWhenHasProfileIncludeInProfileSpecificDocumentThrowsException(String property, TestInfo info) {
+		this.environment.setProperty("spring.config.location", getConfigLocation(info));
+		ConfigDataEnvironment configDataEnvironment = new ConfigDataEnvironment(this.logFactory, this.bootstrapContext,
+				this.environment, this.resourceLoader, this.additionalProfiles, null) {
+
+			@Override
+			protected ConfigDataEnvironmentContributors createContributors(
+					List<ConfigDataEnvironmentContributor> contributors) {
+				Map<String, Object> source = new LinkedHashMap<>();
+				source.put("spring.config.activate.on-profile", "activate");
+				source.put("spring.profiles." + property, "include");
+				ConfigData data = new ConfigData(Collections.singleton(new MapPropertySource("test", source)));
+				contributors.add(ConfigDataEnvironmentContributor.ofUnboundImport(ConfigDataLocation.of("test"),
+						mock(ConfigDataResource.class), false, data, 0));
+				return super.createContributors(contributors);
+			}
+
+		};
+		assertThatExceptionOfType(InactiveConfigDataAccessException.class)
+				.isThrownBy(configDataEnvironment::processAndApply);
+	}
+
+	@ParameterizedTest
+	@CsvSource({ "spring.profiles.include", "spring.profiles.include[0]" })
+	void processAndApplyIncludesProfilesFromSpringProfilesInclude(String property, TestInfo info) {
+		this.environment.setProperty("spring.config.location", getConfigLocation(info));
+		ConfigDataEnvironment configDataEnvironment = new ConfigDataEnvironment(this.logFactory, this.bootstrapContext,
+				this.environment, this.resourceLoader, this.additionalProfiles, null) {
+
+			@Override
+			protected ConfigDataEnvironmentContributors createContributors(
+					List<ConfigDataEnvironmentContributor> contributors) {
+				Map<String, Object> source = new LinkedHashMap<>();
+				source.put(property, "included");
+				ConfigData data = new ConfigData(Collections.singleton(new MapPropertySource("test", source)));
+				contributors.add(ConfigDataEnvironmentContributor.ofUnboundImport(ConfigDataLocation.of("test"),
+						mock(ConfigDataResource.class), false, data, 0));
+				return super.createContributors(contributors);
+			}
+
+		};
+		configDataEnvironment.processAndApply();
+		assertThat(this.environment.getActiveProfiles()).containsExactly("included");
+	}
+
+	@Test
+	void processAndApplyDoesNotSetProfilesFromIgnoreProfilesContributorsWhenNoProfilesActive(TestInfo info) {
+		this.environment.setProperty("spring.config.location", getConfigLocation(info));
+		ConfigDataEnvironment configDataEnvironment = new ConfigDataEnvironment(this.logFactory, this.bootstrapContext,
+				this.environment, this.resourceLoader, this.additionalProfiles, null) {
+
+			@Override
+			protected ConfigDataEnvironmentContributors createContributors(
+					List<ConfigDataEnvironmentContributor> contributors) {
+				Map<String, Object> source = new LinkedHashMap<>();
+				source.put("spring.profiles.active", "ignore1");
+				source.put("spring.profiles.include", "ignore2");
+				ConfigData data = new ConfigData(Collections.singleton(new MapPropertySource("test", source)),
+						ConfigData.Option.IGNORE_PROFILES);
+				contributors.add(ConfigDataEnvironmentContributor.ofUnboundImport(ConfigDataLocation.of("test"),
+						mock(ConfigDataResource.class), false, data, 0));
+				return super.createContributors(contributors);
+			}
+
+		};
+		configDataEnvironment.processAndApply();
+		assertThat(this.environment.getActiveProfiles()).isEmpty();
+		assertThat(this.environment.getProperty("spring")).isEqualTo("boot");
+	}
+
 	@Test
 	@Disabled("Disabled until spring.profiles support is dropped")
 	void processAndApplyWhenHasInvalidPropertyThrowsException() {
@@ -236,7 +301,7 @@ class ConfigDataEnvironmentTests {
 		assertThat(listener.getAddedPropertySources()).hasSize(1);
 		AddedPropertySource addedPropertySource = listener.getAddedPropertySources().get(0);
 		assertThat(addedPropertySource.getPropertySource().getProperty("spring")).isEqualTo("boot");
-		assertThat(addedPropertySource.getLocation().toString()).isEqualTo(getConfigLocation(info));
+		assertThat(addedPropertySource.getLocation()).hasToString(getConfigLocation(info));
 		assertThat(addedPropertySource.getResource().toString()).contains("class path resource")
 				.contains(info.getTestMethod().get().getName());
 	}

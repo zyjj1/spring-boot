@@ -36,7 +36,7 @@ import org.springframework.boot.buildpack.platform.docker.UpdateListener;
 import org.springframework.boot.buildpack.platform.docker.type.Image;
 import org.springframework.boot.buildpack.platform.docker.type.ImageReference;
 import org.springframework.boot.gradle.junit.GradleCompatibility;
-import org.springframework.boot.gradle.testkit.GradleBuild;
+import org.springframework.boot.testsupport.gradle.testkit.GradleBuild;
 import org.springframework.boot.testsupport.testcontainers.DockerImageNames;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -49,7 +49,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @GradleCompatibility
 @Testcontainers(disabledWithoutDocker = true)
 @Disabled("Disabled until differences between running locally and in CI can be diagnosed")
-public class BootBuildImageRegistryIntegrationTests {
+class BootBuildImageRegistryIntegrationTests {
 
 	@Container
 	static final RegistryContainer registry = new RegistryContainer().withStartupAttempts(5)
@@ -66,7 +66,7 @@ public class BootBuildImageRegistryIntegrationTests {
 	}
 
 	@TestTemplate
-	void buildsImageAndPublishesToRegistry() throws IOException, InterruptedException {
+	void buildsImageAndPublishesToRegistry() throws IOException {
 		writeMainClass();
 		String repoName = "test-image";
 		String imageName = this.registryAddress + "/" + repoName;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,9 +39,8 @@ import org.springframework.http.HttpStatus;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 
 /**
  * Tests for {@link HttpTunnelConnection}.
@@ -62,7 +61,7 @@ class HttpTunnelConnectionTests {
 	@Mock
 	private Closeable closeable;
 
-	private MockClientHttpRequestFactory requestFactory = new MockClientHttpRequestFactory();
+	private final MockClientHttpRequestFactory requestFactory = new MockClientHttpRequestFactory();
 
 	@BeforeEach
 	void setup() {
@@ -109,10 +108,10 @@ class HttpTunnelConnectionTests {
 	void closeTunnelCallsCloseableOnce() throws Exception {
 		this.requestFactory.willRespondAfterDelay(1000, HttpStatus.GONE);
 		WritableByteChannel channel = openTunnel(false);
-		verify(this.closeable, never()).close();
+		then(this.closeable).should(never()).close();
 		channel.close();
 		channel.close();
-		verify(this.closeable, times(1)).close();
+		then(this.closeable).should().close();
 	}
 
 	@Test
@@ -122,7 +121,7 @@ class HttpTunnelConnectionTests {
 		write(channel, "hello");
 		write(channel, "1+1");
 		write(channel, "1+2");
-		assertThat(this.incomingData.toString()).isEqualTo("hi=2=3");
+		assertThat(this.incomingData).hasToString("hi=2=3");
 	}
 
 	@Test
@@ -133,16 +132,17 @@ class HttpTunnelConnectionTests {
 		this.requestFactory.willRespond("hi");
 		TunnelChannel channel = openTunnel(true);
 		write(channel, "hello");
-		assertThat(this.incomingData.toString()).isEqualTo("hi");
-		assertThat(this.requestFactory.getExecutedRequests().size()).isGreaterThan(10);
+		assertThat(this.incomingData).hasToString("hi");
+		assertThat(this.requestFactory.getExecutedRequests()).hasSizeGreaterThan(10);
 	}
 
 	@Test
 	void connectFailureLogsWarning(CapturedOutput output) throws Exception {
 		this.requestFactory.willRespond(new ConnectException());
-		TunnelChannel tunnel = openTunnel(true);
-		assertThat(tunnel.isOpen()).isFalse();
-		assertThat(output).contains("Failed to connect to remote application at http://localhost:12345");
+		try (TunnelChannel tunnel = openTunnel(true)) {
+			assertThat(tunnel.isOpen()).isFalse();
+			assertThat(output).contains("Failed to connect to remote application at http://localhost:12345");
+		}
 	}
 
 	private void write(TunnelChannel channel, String string) throws IOException {

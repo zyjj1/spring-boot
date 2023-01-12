@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,7 +33,6 @@ import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.Environment;
 import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.core.io.ResourceLoader;
-import org.springframework.core.log.LogMessage;
 
 /**
  * {@link EnvironmentPostProcessor} that loads and applies {@link ConfigData} to Spring's
@@ -41,6 +40,7 @@ import org.springframework.core.log.LogMessage;
  *
  * @author Phillip Webb
  * @author Madhura Bhave
+ * @author Nguyen Bao Sach
  * @since 2.4.0
  */
 public class ConfigDataEnvironmentPostProcessor implements EnvironmentPostProcessor, Ordered {
@@ -70,7 +70,7 @@ public class ConfigDataEnvironmentPostProcessor implements EnvironmentPostProces
 		this(logFactory, bootstrapContext, null);
 	}
 
-	public ConfigDataEnvironmentPostProcessor(DeferredLogFactory logFactory,
+	private ConfigDataEnvironmentPostProcessor(DeferredLogFactory logFactory,
 			ConfigurableBootstrapContext bootstrapContext,
 			ConfigDataEnvironmentUpdateListener environmentUpdateListener) {
 		this.logFactory = logFactory;
@@ -91,32 +91,15 @@ public class ConfigDataEnvironmentPostProcessor implements EnvironmentPostProces
 
 	void postProcessEnvironment(ConfigurableEnvironment environment, ResourceLoader resourceLoader,
 			Collection<String> additionalProfiles) {
-		try {
-			this.logger.trace("Post-processing environment to add config data");
-			resourceLoader = (resourceLoader != null) ? resourceLoader : new DefaultResourceLoader();
-			getConfigDataEnvironment(environment, resourceLoader, additionalProfiles).processAndApply();
-		}
-		catch (UseLegacyConfigProcessingException ex) {
-			this.logger.debug(LogMessage.format("Switching to legacy config file processing [%s]",
-					ex.getConfigurationProperty()));
-			postProcessUsingLegacyApplicationListener(environment, resourceLoader);
-		}
+		this.logger.trace("Post-processing environment to add config data");
+		resourceLoader = (resourceLoader != null) ? resourceLoader : new DefaultResourceLoader();
+		getConfigDataEnvironment(environment, resourceLoader, additionalProfiles).processAndApply();
 	}
 
 	ConfigDataEnvironment getConfigDataEnvironment(ConfigurableEnvironment environment, ResourceLoader resourceLoader,
 			Collection<String> additionalProfiles) {
 		return new ConfigDataEnvironment(this.logFactory, this.bootstrapContext, environment, resourceLoader,
 				additionalProfiles, this.environmentUpdateListener);
-	}
-
-	private void postProcessUsingLegacyApplicationListener(ConfigurableEnvironment environment,
-			ResourceLoader resourceLoader) {
-		getLegacyListener().addPropertySources(environment, resourceLoader);
-	}
-
-	@SuppressWarnings("deprecation")
-	LegacyConfigFileApplicationListener getLegacyListener() {
-		return new LegacyConfigFileApplicationListener(this.logFactory.getLog(ConfigFileApplicationListener.class));
 	}
 
 	/**
@@ -184,20 +167,6 @@ public class ConfigDataEnvironmentPostProcessor implements EnvironmentPostProces
 		ConfigDataEnvironmentPostProcessor postProcessor = new ConfigDataEnvironmentPostProcessor(logFactory,
 				bootstrapContext, environmentUpdateListener);
 		postProcessor.postProcessEnvironment(environment, resourceLoader, additionalProfiles);
-	}
-
-	@SuppressWarnings("deprecation")
-	static class LegacyConfigFileApplicationListener extends ConfigFileApplicationListener {
-
-		LegacyConfigFileApplicationListener(Log logger) {
-			super(logger);
-		}
-
-		@Override
-		public void addPropertySources(ConfigurableEnvironment environment, ResourceLoader resourceLoader) {
-			super.addPropertySources(environment, resourceLoader);
-		}
-
 	}
 
 }

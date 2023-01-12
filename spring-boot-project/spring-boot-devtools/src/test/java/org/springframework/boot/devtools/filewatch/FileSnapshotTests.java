@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,7 +51,7 @@ class FileSnapshotTests {
 	}
 
 	@Test
-	void fileMustNotBeADirectory() throws Exception {
+	void fileMustNotBeADirectory() {
 		File file = new File(this.tempDir, "file");
 		file.mkdir();
 		assertThatIllegalArgumentException().isThrownBy(() -> new FileSnapshot(file))
@@ -65,7 +65,7 @@ class FileSnapshotTests {
 		FileSnapshot snapshot1 = new FileSnapshot(file);
 		FileSnapshot snapshot2 = new FileSnapshot(fileCopy);
 		assertThat(snapshot1).isEqualTo(snapshot2);
-		assertThat(snapshot1.hashCode()).isEqualTo(snapshot2.hashCode());
+		assertThat(snapshot1).hasSameHashCodeAs(snapshot2);
 	}
 
 	@Test

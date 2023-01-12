@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,21 +29,24 @@ import org.springframework.util.ClassUtils;
  * {@link ContextCustomizerFactory} for {@code WebTestClient}.
  *
  * @author Stephane Nicoll
+ * @author Andy Wilkinson
+ * @author Anugrah Singhal
  */
 class WebTestClientContextCustomizerFactory implements ContextCustomizerFactory {
 
-	private static final String WEB_TEST_CLIENT_CLASS = "org.springframework.web.reactive.function.client.WebClient";
+	private static final boolean webClientPresent;
+
+	static {
+		ClassLoader loader = WebTestClientContextCustomizerFactory.class.getClassLoader();
+		webClientPresent = ClassUtils.isPresent("org.springframework.web.reactive.function.client.WebClient", loader);
+	}
 
 	@Override
 	public ContextCustomizer createContextCustomizer(Class<?> testClass,
 			List<ContextConfigurationAttributes> configAttributes) {
 		SpringBootTest springBootTest = TestContextAnnotationUtils.findMergedAnnotation(testClass,
 				SpringBootTest.class);
-		return (springBootTest != null && isWebClientPresent()) ? new WebTestClientContextCustomizer() : null;
-	}
-
-	private boolean isWebClientPresent() {
-		return ClassUtils.isPresent(WEB_TEST_CLIENT_CLASS, getClass().getClassLoader());
+		return (springBootTest != null && webClientPresent) ? new WebTestClientContextCustomizer() : null;
 	}
 
 }

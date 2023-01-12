@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,6 +45,8 @@ import org.springframework.boot.logging.LoggingSystemProperties;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationListener;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.context.SmartLifecycle;
 import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.context.event.GenericApplicationListener;
 import org.springframework.core.Ordered;
@@ -131,10 +133,15 @@ public class LoggingApplicationListener implements GenericApplicationListener {
 	public static final String LOG_FILE_BEAN_NAME = "springBootLogFile";
 
 	/**
-	 * The name of the{@link LoggerGroups} bean.
+	 * The name of the {@link LoggerGroups} bean.
 	 * @since 2.2.0
 	 */
 	public static final String LOGGER_GROUPS_BEAN_NAME = "springBootLoggerGroups";
+
+	/**
+	 * The name of the {@link Lifecycle} bean used to handle cleanup.
+	 */
+	private static final String LOGGING_LIFECYCLE_BEAN_NAME = "springBootLoggingLifecycle";
 
 	private static final Map<String, List<String>> DEFAULT_GROUP_LOGGERS;
 	static {
@@ -209,18 +216,17 @@ public class LoggingApplicationListener implements GenericApplicationListener {
 
 	@Override
 	public void onApplicationEvent(ApplicationEvent event) {
-		if (event instanceof ApplicationStartingEvent) {
-			onApplicationStartingEvent((ApplicationStartingEvent) event);
+		if (event instanceof ApplicationStartingEvent startingEvent) {
+			onApplicationStartingEvent(startingEvent);
 		}
-		else if (event instanceof ApplicationEnvironmentPreparedEvent) {
-			onApplicationEnvironmentPreparedEvent((ApplicationEnvironmentPreparedEvent) event);
+		else if (event instanceof ApplicationEnvironmentPreparedEvent environmentPreparedEvent) {
+			onApplicationEnvironmentPreparedEvent(environmentPreparedEvent);
 		}
-		else if (event instanceof ApplicationPreparedEvent) {
-			onApplicationPreparedEvent((ApplicationPreparedEvent) event);
+		else if (event instanceof ApplicationPreparedEvent preparedEvent) {
+			onApplicationPreparedEvent(preparedEvent);
 		}
-		else if (event instanceof ContextClosedEvent
-				&& ((ContextClosedEvent) event).getApplicationContext().getParent() == null) {
-			onContextClosedEvent();
+		else if (event instanceof ContextClosedEvent) {
+			onContextClosedEvent((ContextClosedEvent) event);
 		}
 		else if (event instanceof ApplicationFailedEvent) {
 			onApplicationFailedEvent();
@@ -233,14 +239,16 @@ public class LoggingApplicationListener implements GenericApplicationListener {
 	}
 
 	private void onApplicationEnvironmentPreparedEvent(ApplicationEnvironmentPreparedEvent event) {
+		SpringApplication springApplication = event.getSpringApplication();
 		if (this.loggingSystem == null) {
-			this.loggingSystem = LoggingSystem.get(event.getSpringApplication().getClassLoader());
+			this.loggingSystem = LoggingSystem.get(springApplication.getClassLoader());
 		}
-		initialize(event.getEnvironment(), event.getSpringApplication().getClassLoader());
+		initialize(event.getEnvironment(), springApplication.getClassLoader());
 	}
 
 	private void onApplicationPreparedEvent(ApplicationPreparedEvent event) {
-		ConfigurableListableBeanFactory beanFactory = event.getApplicationContext().getBeanFactory();
+		ConfigurableApplicationContext applicationContext = event.getApplicationContext();
+		ConfigurableListableBeanFactory beanFactory = applicationContext.getBeanFactory();
 		if (!beanFactory.containsBean(LOGGING_SYSTEM_BEAN_NAME)) {
 			beanFactory.registerSingleton(LOGGING_SYSTEM_BEAN_NAME, this.loggingSystem);
 		}
@@ -250,18 +258,27 @@ public class LoggingApplicationListener implements GenericApplicationListener {
 		if (this.loggerGroups != null && !beanFactory.containsBean(LOGGER_GROUPS_BEAN_NAME)) {
 			beanFactory.registerSingleton(LOGGER_GROUPS_BEAN_NAME, this.loggerGroups);
 		}
+		if (!beanFactory.containsBean(LOGGING_LIFECYCLE_BEAN_NAME) && applicationContext.getParent() == null) {
+			beanFactory.registerSingleton(LOGGING_LIFECYCLE_BEAN_NAME, new Lifecycle());
+		}
 	}
 
-	private void onContextClosedEvent() {
+	private void onContextClosedEvent(ContextClosedEvent event) {
+		ApplicationContext applicationContext = event.getApplicationContext();
+		if (applicationContext.getParent() != null || applicationContext.containsBean(LOGGING_LIFECYCLE_BEAN_NAME)) {
+			return;
+		}
+		cleanupLoggingSystem();
+	}
+
+	void cleanupLoggingSystem() {
 		if (this.loggingSystem != null) {
 			this.loggingSystem.cleanUp();
 		}
 	}
 
 	private void onApplicationFailedEvent() {
-		if (this.loggingSystem != null) {
-			this.loggingSystem.cleanUp();
-		}
+		cleanupLoggingSystem();
 	}
 
 	/**
@@ -305,7 +322,10 @@ public class LoggingApplicationListener implements GenericApplicationListener {
 	}
 
 	private void initializeSystem(ConfigurableEnvironment environment, LoggingSystem system, LogFile logFile) {
-		String logConfig = StringUtils.trimWhitespace(environment.getProperty(CONFIG_PROPERTY));
+		String logConfig = environment.getProperty(CONFIG_PROPERTY);
+		if (StringUtils.hasLength(logConfig)) {
+			logConfig = logConfig.strip();
+		}
 		try {
 			LoggingInitializationContext initializationContext = new LoggingInitializationContext(environment);
 			if (ignoreLogConfig(logConfig)) {
@@ -398,17 +418,16 @@ public class LoggingApplicationListener implements GenericApplicationListener {
 	}
 
 	private void registerShutdownHookIfNecessary(Environment environment, LoggingSystem loggingSystem) {
-		boolean registerShutdownHook = environment.getProperty(REGISTER_SHUTDOWN_HOOK_PROPERTY, Boolean.class, true);
-		if (registerShutdownHook) {
+		if (environment.getProperty(REGISTER_SHUTDOWN_HOOK_PROPERTY, Boolean.class, true)) {
 			Runnable shutdownHandler = loggingSystem.getShutdownHandler();
 			if (shutdownHandler != null && shutdownHookRegistered.compareAndSet(false, true)) {
-				registerShutdownHook(new Thread(shutdownHandler));
+				registerShutdownHook(shutdownHandler);
 			}
 		}
 	}
 
-	void registerShutdownHook(Thread shutdownHook) {
-		Runtime.getRuntime().addShutdownHook(shutdownHook);
+	void registerShutdownHook(Runnable shutdownHandler) {
+		SpringApplication.getShutdownHandlers().add(shutdownHandler);
 	}
 
 	public void setOrder(int order) {
@@ -436,6 +455,34 @@ public class LoggingApplicationListener implements GenericApplicationListener {
 	 */
 	public void setParseArgs(boolean parseArgs) {
 		this.parseArgs = parseArgs;
+	}
+
+	private class Lifecycle implements SmartLifecycle {
+
+		private volatile boolean running;
+
+		@Override
+		public void start() {
+			this.running = true;
+		}
+
+		@Override
+		public void stop() {
+			this.running = false;
+			cleanupLoggingSystem();
+		}
+
+		@Override
+		public boolean isRunning() {
+			return this.running;
+		}
+
+		@Override
+		public int getPhase() {
+			// Shutdown late and always after WebServerStartStopLifecycle
+			return Integer.MIN_VALUE + 1;
+		}
+
 	}
 
 }

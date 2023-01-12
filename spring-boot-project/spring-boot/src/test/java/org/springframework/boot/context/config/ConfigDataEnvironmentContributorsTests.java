@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 package org.springframework.boot.context.config;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -37,6 +38,8 @@ import org.springframework.boot.context.config.ConfigDataEnvironmentContributors
 import org.springframework.boot.context.properties.bind.BindException;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.logging.DeferredLogFactory;
+import org.springframework.core.io.DefaultResourceLoader;
+import org.springframework.core.io.support.SpringFactoriesLoader;
 import org.springframework.mock.env.MockEnvironment;
 import org.springframework.mock.env.MockPropertySource;
 
@@ -45,8 +48,8 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 
 /**
  * Tests for {@link ConfigDataEnvironmentContributors}.
@@ -61,9 +64,9 @@ class ConfigDataEnvironmentContributorsTests {
 
 	private static final ConfigDataLocation LOCATION_2 = ConfigDataLocation.of("location2");
 
-	private DeferredLogFactory logFactory = Supplier::get;
+	private final DeferredLogFactory logFactory = Supplier::get;
 
-	private DefaultBootstrapContext bootstrapContext = new DefaultBootstrapContext();
+	private final DefaultBootstrapContext bootstrapContext = new DefaultBootstrapContext();
 
 	private MockEnvironment environment;
 
@@ -84,8 +87,10 @@ class ConfigDataEnvironmentContributorsTests {
 		this.environment = new MockEnvironment();
 		this.binder = Binder.get(this.environment);
 		ConfigDataLocationResolvers resolvers = new ConfigDataLocationResolvers(this.logFactory, this.bootstrapContext,
-				this.binder, null);
-		ConfigDataLoaders loaders = new ConfigDataLoaders(this.logFactory, this.bootstrapContext);
+				this.binder, new DefaultResourceLoader(getClass().getClassLoader()),
+				SpringFactoriesLoader.forDefaultResourceLocation(getClass().getClassLoader()));
+		ConfigDataLoaders loaders = new ConfigDataLoaders(this.logFactory, this.bootstrapContext,
+				SpringFactoriesLoader.forDefaultResourceLocation());
 		this.importer = new ConfigDataImporter(this.logFactory, ConfigDataNotFoundAction.FAIL, resolvers, loaders);
 		this.activationContext = new ConfigDataActivationContext(CloudPlatform.KUBERNETES, null);
 	}
@@ -182,7 +187,7 @@ class ConfigDataEnvironmentContributorsTests {
 		ConfigDataEnvironmentContributors contributors = new ConfigDataEnvironmentContributors(this.logFactory,
 				this.bootstrapContext, Arrays.asList(existingContributor, contributor));
 		contributors.withProcessedImports(this.importer, this.activationContext);
-		verify(this.importer).resolveAndLoad(any(), this.locationResolverContext.capture(), any(), any());
+		then(this.importer).should().resolveAndLoad(any(), this.locationResolverContext.capture(), any(), any());
 		ConfigDataLocationResolverContext context = this.locationResolverContext.getValue();
 		assertThat(context.getBinder().bind("test", String.class).get()).isEqualTo("springboot");
 	}
@@ -209,7 +214,8 @@ class ConfigDataEnvironmentContributorsTests {
 		ConfigDataEnvironmentContributors contributors = new ConfigDataEnvironmentContributors(this.logFactory,
 				this.bootstrapContext, Arrays.asList(contributor));
 		contributors.withProcessedImports(this.importer, this.activationContext);
-		verify(this.importer).resolveAndLoad(any(), this.locationResolverContext.capture(), any(), eq(secondLocations));
+		then(this.importer).should().resolveAndLoad(any(), this.locationResolverContext.capture(), any(),
+				eq(secondLocations));
 		ConfigDataLocationResolverContext context = this.locationResolverContext.getValue();
 		assertThat(context.getParent()).hasToString("a");
 	}
@@ -232,7 +238,7 @@ class ConfigDataEnvironmentContributorsTests {
 		ConfigDataEnvironmentContributors contributors = new ConfigDataEnvironmentContributors(this.logFactory,
 				this.bootstrapContext, Arrays.asList(existingContributor, contributor));
 		contributors.withProcessedImports(this.importer, this.activationContext);
-		verify(this.importer).resolveAndLoad(any(), this.locationResolverContext.capture(), any(), any());
+		then(this.importer).should().resolveAndLoad(any(), this.locationResolverContext.capture(), any(), any());
 		ConfigDataLocationResolverContext context = this.locationResolverContext.getValue();
 		assertThat(context.getBootstrapContext()).isSameAs(this.bootstrapContext);
 	}
@@ -255,7 +261,7 @@ class ConfigDataEnvironmentContributorsTests {
 		ConfigDataEnvironmentContributors contributors = new ConfigDataEnvironmentContributors(this.logFactory,
 				this.bootstrapContext, Arrays.asList(existingContributor, contributor));
 		contributors.withProcessedImports(this.importer, this.activationContext);
-		verify(this.importer).resolveAndLoad(any(), any(), this.loaderContext.capture(), any());
+		then(this.importer).should().resolveAndLoad(any(), any(), this.loaderContext.capture(), any());
 		ConfigDataLoaderContext context = this.loaderContext.getValue();
 		assertThat(context.getBootstrapContext()).isSameAs(this.bootstrapContext);
 	}
@@ -387,8 +393,7 @@ class ConfigDataEnvironmentContributorsTests {
 			int propertySourceIndex) {
 		ConfigDataEnvironmentContributor contributor = ConfigDataEnvironmentContributor.ofUnboundImport(null, null,
 				false, configData, propertySourceIndex);
-		Binder binder = new Binder(contributor.getConfigurationPropertySource());
-		return contributor.withBoundProperties(binder);
+		return contributor.withBoundProperties(Collections.singleton(contributor), null);
 	}
 
 	private static class TestConfigDataResource extends ConfigDataResource {

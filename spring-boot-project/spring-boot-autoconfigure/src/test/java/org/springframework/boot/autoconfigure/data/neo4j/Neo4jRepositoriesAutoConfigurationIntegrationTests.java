@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,11 +43,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @SpringBootTest
 @Testcontainers(disabledWithoutDocker = true)
-public class Neo4jRepositoriesAutoConfigurationIntegrationTests {
+class Neo4jRepositoriesAutoConfigurationIntegrationTests {
 
 	@Container
 	private static final Neo4jContainer<?> neo4jServer = new Neo4jContainer<>(DockerImageNames.neo4j())
-			.withStartupTimeout(Duration.ofMinutes(10));
+			.withStartupAttempts(5).withStartupTimeout(Duration.ofMinutes(10));
 
 	@DynamicPropertySource
 	static void neo4jProperties(DynamicPropertyRegistry registry) {
@@ -61,7 +61,7 @@ public class Neo4jRepositoriesAutoConfigurationIntegrationTests {
 
 	@Test
 	void ensureRepositoryIsReady() {
-		assertThat(this.countryRepository.count()).isEqualTo(0);
+		assertThat(this.countryRepository.count()).isZero();
 	}
 
 	@Configuration

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,6 @@
 
 package org.springframework.boot.autoconfigure.sql.init;
 
-import java.nio.charset.Charset;
-import java.util.List;
-
 import javax.sql.DataSource;
 
 import io.r2dbc.spi.ConnectionFactory;
@@ -27,16 +24,19 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
+import org.springframework.boot.autoconfigure.logging.ConditionEvaluationReportLoggingListener;
 import org.springframework.boot.autoconfigure.r2dbc.R2dbcAutoConfiguration;
 import org.springframework.boot.jdbc.init.DataSourceScriptDatabaseInitializer;
+import org.springframework.boot.logging.LogLevel;
 import org.springframework.boot.r2dbc.init.R2dbcScriptDatabaseInitializer;
 import org.springframework.boot.sql.init.AbstractScriptDatabaseInitializer;
 import org.springframework.boot.sql.init.DatabaseInitializationSettings;
 import org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization;
+import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.io.Resource;
+import org.springframework.jdbc.datasource.init.DatabasePopulator;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -45,9 +45,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Andy Wilkinson
  */
-public class SqlInitializationAutoConfigurationTests {
+class SqlInitializationAutoConfigurationTests {
 
-	private ApplicationContextRunner contextRunner = new ApplicationContextRunner()
+	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
 			.withConfiguration(AutoConfigurations.of(SqlInitializationAutoConfiguration.class)).withPropertyValues(
 					"spring.datasource.generate-unique-name:true", "spring.r2dbc.generate-unique-name:true");
 
@@ -64,9 +64,10 @@ public class SqlInitializationAutoConfigurationTests {
 	}
 
 	@Test
-	void whenConnectionFactoryIsAvailableAndInitializationIsDisabledThenInitializerIsNotAutoConfigured() {
+	void whenConnectionFactoryIsAvailableAndModeIsNeverThenInitializerIsNotAutoConfigured() {
 		this.contextRunner.withConfiguration(AutoConfigurations.of(R2dbcAutoConfiguration.class))
-				.withPropertyValues("spring.sql.init.enabled:false")
+				.withInitializer(ConditionEvaluationReportLoggingListener.forLogLevel(LogLevel.INFO))
+				.withPropertyValues("spring.sql.init.mode:never")
 				.run((context) -> assertThat(context).doesNotHaveBean(AbstractScriptDatabaseInitializer.class));
 	}
 
@@ -77,9 +78,9 @@ public class SqlInitializationAutoConfigurationTests {
 	}
 
 	@Test
-	void whenDataSourceIsAvailableAndInitializationIsDisabledThenInitializerIsNotAutoConfigured() {
+	void whenDataSourceIsAvailableAndModeIsNeverThenThenInitializerIsNotAutoConfigured() {
 		this.contextRunner.withConfiguration(AutoConfigurations.of(DataSourceAutoConfiguration.class))
-				.withPropertyValues("spring.sql.init.enabled:false")
+				.withPropertyValues("spring.sql.init.mode:never")
 				.run((context) -> assertThat(context).doesNotHaveBean(AbstractScriptDatabaseInitializer.class));
 	}
 
@@ -93,11 +94,18 @@ public class SqlInitializationAutoConfigurationTests {
 	}
 
 	@Test
-	void whenAnInitializerIsDefinedThenInitializerIsNotAutoConfigured() {
+	void whenAnSqlInitializerIsDefinedThenInitializerIsNotAutoConfigured() {
 		this.contextRunner.withConfiguration(AutoConfigurations.of(R2dbcAutoConfiguration.class))
-				.withUserConfiguration(DataSourceAutoConfiguration.class, DatabaseInitializerConfiguration.class)
+				.withUserConfiguration(DataSourceAutoConfiguration.class, SqlDatabaseInitializerConfiguration.class)
 				.run((context) -> assertThat(context).hasSingleBean(AbstractScriptDatabaseInitializer.class)
 						.hasBean("customInitializer"));
+	}
+
+	@Test
+	void whenAnInitializerIsDefinedThenSqlInitializerIsStillAutoConfigured() {
+		this.contextRunner.withConfiguration(AutoConfigurations.of(DataSourceAutoConfiguration.class))
+				.withUserConfiguration(DatabaseInitializerConfiguration.class).run((context) -> assertThat(context)
+						.hasSingleBean(SqlDataSourceScriptDatabaseInitializer.class).hasBean("customInitializer"));
 	}
 
 	@Test
@@ -122,17 +130,63 @@ public class SqlInitializationAutoConfigurationTests {
 				});
 	}
 
+	@Test
+	void whenADataSourceIsAvailableAndSpringJdbcIsNotThenAutoConfigurationBacksOff() {
+		this.contextRunner.withConfiguration(AutoConfigurations.of(DataSourceAutoConfiguration.class))
+				.withClassLoader(new FilteredClassLoader(DatabasePopulator.class)).run((context) -> {
+					assertThat(context).hasSingleBean(DataSource.class);
+					assertThat(context).doesNotHaveBean(AbstractScriptDatabaseInitializer.class);
+				});
+	}
+
+	@Test
+	void whenAConnectionFactoryIsAvailableAndSpringR2dbcIsNotThenAutoConfigurationBacksOff() {
+		this.contextRunner.withConfiguration(AutoConfigurations.of(R2dbcAutoConfiguration.class))
+				.withClassLoader(
+						new FilteredClassLoader(org.springframework.r2dbc.connection.init.DatabasePopulator.class))
+				.run((context) -> {
+					assertThat(context).hasSingleBean(ConnectionFactory.class);
+					assertThat(context).doesNotHaveBean(AbstractScriptDatabaseInitializer.class);
+				});
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class SqlDatabaseInitializerConfiguration {
+
+		@Bean
+		SqlDataSourceScriptDatabaseInitializer customInitializer() {
+			return new SqlDataSourceScriptDatabaseInitializer(null, new DatabaseInitializationSettings()) {
+
+				@Override
+				protected void runScripts(Scripts scripts) {
+					// No-op
+				}
+
+				@Override
+				protected boolean isEmbeddedDatabase() {
+					return true;
+				}
+
+			};
+		}
+
+	}
+
 	@Configuration(proxyBeanMethods = false)
 	static class DatabaseInitializerConfiguration {
 
 		@Bean
-		AbstractScriptDatabaseInitializer customInitializer() {
-			return new AbstractScriptDatabaseInitializer(new DatabaseInitializationSettings()) {
+		DataSourceScriptDatabaseInitializer customInitializer() {
+			return new DataSourceScriptDatabaseInitializer(null, new DatabaseInitializationSettings()) {
 
 				@Override
-				protected void runScripts(List<Resource> resources, boolean continueOnError, String separator,
-						Charset encoding) {
+				protected void runScripts(Scripts scripts) {
 					// No-op
+				}
+
+				@Override
+				protected boolean isEmbeddedDatabase() {
+					return true;
 				}
 
 			};

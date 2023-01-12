@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -69,7 +69,7 @@ class ErrorMvcAutoConfigurationTests {
 	}
 
 	@Test
-	void renderCanUseJavaTimeTypeAsTimestamp() throws Exception { // gh-23256
+	void renderCanUseJavaTimeTypeAsTimestamp() { // gh-23256
 		this.contextRunner.run((context) -> {
 			View errorView = context.getBean("error", View.class);
 			ErrorAttributes errorAttributes = context.getBean(ErrorAttributes.class);
@@ -103,8 +103,8 @@ class ErrorMvcAutoConfigurationTests {
 		MockHttpServletRequest request = new MockHttpServletRequest("GET", "/path");
 		MockHttpServletResponse response = new MockHttpServletResponse();
 		DispatcherServletWebRequest webRequest = new DispatcherServletWebRequest(request, response);
-		webRequest.setAttribute("javax.servlet.error.exception", ex, RequestAttributes.SCOPE_REQUEST);
-		webRequest.setAttribute("javax.servlet.error.request_uri", "/path", RequestAttributes.SCOPE_REQUEST);
+		webRequest.setAttribute("jakarta.servlet.error.exception", ex, RequestAttributes.SCOPE_REQUEST);
+		webRequest.setAttribute("jakarta.servlet.error.request_uri", "/path", RequestAttributes.SCOPE_REQUEST);
 		response.setCommitted(committed);
 		response.setOutputStreamAccessAllowed(!committed);
 		response.setWriterAccessAllowed(!committed);

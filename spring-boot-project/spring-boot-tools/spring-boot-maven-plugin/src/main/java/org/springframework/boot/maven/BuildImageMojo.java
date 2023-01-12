@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,11 +32,7 @@ import org.apache.commons.compress.archivers.tar.TarConstants;
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.logging.Log;
-import org.apache.maven.plugins.annotations.Execute;
-import org.apache.maven.plugins.annotations.LifecyclePhase;
-import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
-import org.apache.maven.plugins.annotations.ResolutionScope;
 
 import org.springframework.boot.buildpack.platform.build.AbstractBuildLog;
 import org.springframework.boot.buildpack.platform.build.BuildLog;
@@ -50,23 +46,19 @@ import org.springframework.boot.buildpack.platform.io.Owner;
 import org.springframework.boot.buildpack.platform.io.TarArchive;
 import org.springframework.boot.loader.tools.EntryWriter;
 import org.springframework.boot.loader.tools.ImagePackager;
+import org.springframework.boot.loader.tools.LayoutFactory;
 import org.springframework.boot.loader.tools.Libraries;
 import org.springframework.util.StringUtils;
 
 /**
- * Package an application into a OCI image using a buildpack.
+ * Package an application into an OCI image using a buildpack.
  *
  * @author Phillip Webb
  * @author Scott Frederick
+ * @author Jeroen Meijer
  * @since 2.3.0
  */
-@Mojo(name = "build-image", defaultPhase = LifecyclePhase.PACKAGE, requiresProject = true, threadSafe = true,
-		requiresDependencyResolution = ResolutionScope.COMPILE_PLUS_RUNTIME,
-		requiresDependencyCollection = ResolutionScope.COMPILE_PLUS_RUNTIME)
-@Execute(phase = LifecyclePhase.PACKAGE)
-public class BuildImageMojo extends AbstractPackagerMojo {
-
-	private static final String BUILDPACK_JVM_VERSION_KEY = "BP_JVM_VERSION";
+public abstract class BuildImageMojo extends AbstractPackagerMojo {
 
 	static {
 		System.setProperty("org.slf4j.simpleLogger.log.org.apache.http.wire", "ERROR");
@@ -153,11 +145,57 @@ public class BuildImageMojo extends AbstractPackagerMojo {
 	Boolean publish;
 
 	/**
+	 * Alias for {@link Image#network} to support configuration via command-line property.
+	 * @since 2.6.0
+	 */
+	@Parameter(property = "spring-boot.build-image.network", readonly = true)
+	String network;
+
+	/**
 	 * Docker configuration options.
 	 * @since 2.4.0
 	 */
 	@Parameter
 	private Docker docker;
+
+	/**
+	 * The type of archive (which corresponds to how the dependencies are laid out inside
+	 * it). Possible values are {@code JAR}, {@code WAR}, {@code ZIP}, {@code DIR},
+	 * {@code NONE}. Defaults to a guess based on the archive type.
+	 * @since 2.3.11
+	 */
+	@Parameter
+	private LayoutType layout;
+
+	/**
+	 * The layout factory that will be used to create the executable archive if no
+	 * explicit layout is set. Alternative layouts implementations can be provided by 3rd
+	 * parties.
+	 * @since 2.3.11
+	 */
+	@Parameter
+	private LayoutFactory layoutFactory;
+
+	/**
+	 * Return the type of archive that should be used when building the image.
+	 * @return the value of the {@code layout} parameter, or {@code null} if the parameter
+	 * is not provided
+	 */
+	@Override
+	protected LayoutType getLayout() {
+		return this.layout;
+	}
+
+	/**
+	 * Return the layout factory that will be used to determine the
+	 * {@link AbstractPackagerMojo.LayoutType} if no explicit layout is set.
+	 * @return the value of the {@code layoutFactory} parameter, or {@code null} if the
+	 * parameter is not provided
+	 */
+	@Override
+	protected LayoutFactory getLayoutFactory() {
+		return this.layoutFactory;
+	}
 
 	@Override
 	public void execute() throws MojoExecutionException {
@@ -176,7 +214,7 @@ public class BuildImageMojo extends AbstractPackagerMojo {
 		Libraries libraries = getLibraries(Collections.emptySet());
 		try {
 			DockerConfiguration dockerConfiguration = (this.docker != null) ? this.docker.asDockerConfiguration()
-					: null;
+					: new Docker().asDockerConfiguration();
 			BuildRequest request = getBuildRequest(libraries);
 			Builder builder = new Builder(new MojoBuildLog(this::getLog), dockerConfiguration);
 			builder.build(request);
@@ -186,7 +224,7 @@ public class BuildImageMojo extends AbstractPackagerMojo {
 		}
 	}
 
-	private BuildRequest getBuildRequest(Libraries libraries) throws MojoExecutionException {
+	private BuildRequest getBuildRequest(Libraries libraries) {
 		ImagePackager imagePackager = new ImagePackager(getArchiveFile(), getBackupFile());
 		Function<Owner, TarArchive> content = (owner) -> getApplicationContent(owner, libraries, imagePackager);
 		Image image = (this.image != null) ? this.image : new Image();
@@ -208,15 +246,10 @@ public class BuildImageMojo extends AbstractPackagerMojo {
 		if (image.publish == null && this.publish != null) {
 			image.setPublish(this.publish);
 		}
-		if (image.publish != null && image.publish && publishRegistryNotConfigured()) {
-			throw new MojoExecutionException("Publishing an image requires docker.publishRegistry to be configured");
+		if (image.network == null && this.network != null) {
+			image.setNetwork(this.network);
 		}
 		return customize(image.getBuildRequest(this.project.getArtifact(), content));
-	}
-
-	private boolean publishRegistryNotConfigured() {
-		return this.docker == null || this.docker.getPublishRegistry() == null
-				|| this.docker.getPublishRegistry().isEmpty();
 	}
 
 	private TarArchive getApplicationContent(Owner owner, Libraries libraries, ImagePackager imagePackager) {
@@ -238,8 +271,8 @@ public class BuildImageMojo extends AbstractPackagerMojo {
 	}
 
 	/**
-	 * Return the {@link File} to use to backup the original source.
-	 * @return the file to use to backup the original source
+	 * Return the {@link File} to use to back up the original source.
+	 * @return the file to use to back up the original source
 	 */
 	private File getBackupFile() {
 		Artifact source = getSourceArtifact(null);
@@ -250,19 +283,7 @@ public class BuildImageMojo extends AbstractPackagerMojo {
 	}
 
 	private BuildRequest customize(BuildRequest request) {
-		request = customizeEnvironment(request);
 		request = customizeCreator(request);
-		return request;
-	}
-
-	private BuildRequest customizeEnvironment(BuildRequest request) {
-		if (!request.getEnv().containsKey(BUILDPACK_JVM_VERSION_KEY)) {
-			JavaCompilerPluginConfiguration compilerConfiguration = new JavaCompilerPluginConfiguration(this.project);
-			String targetJavaVersion = compilerConfiguration.getTargetMajorVersion();
-			if (StringUtils.hasText(targetJavaVersion)) {
-				return request.withEnv(BUILDPACK_JVM_VERSION_KEY, targetJavaVersion + ".*");
-			}
-		}
 		return request;
 	}
 
@@ -347,7 +368,13 @@ public class BuildImageMojo extends AbstractPackagerMojo {
 		public void writeTo(OutputStream outputStream) throws IOException {
 			TarArchiveOutputStream tar = new TarArchiveOutputStream(outputStream);
 			tar.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX);
-			this.packager.packageImage(this.libraries, (entry, entryWriter) -> write(entry, entryWriter, tar));
+			try {
+				this.packager.packageImage(this.libraries, (entry, entryWriter) -> write(entry, entryWriter, tar));
+			}
+			catch (RuntimeException ex) {
+				outputStream.close();
+				throw new RuntimeException("Error packaging archive for image", ex);
+			}
 		}
 
 		private void write(ZipEntry jarEntry, EntryWriter entryWriter, TarArchiveOutputStream tar) {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -79,9 +79,9 @@ public class JarFile extends AbstractJarFile implements Iterable<java.util.jar.J
 
 	private String urlString;
 
-	private JarFileEntries entries;
+	private final JarFileEntries entries;
 
-	private Supplier<Manifest> manifestSupplier;
+	private final Supplier<Manifest> manifestSupplier;
 
 	private SoftReference<Manifest> manifest;
 
@@ -90,6 +90,8 @@ public class JarFile extends AbstractJarFile implements Iterable<java.util.jar.J
 	private String comment;
 
 	private volatile boolean closed;
+
+	private volatile JarFileWrapper wrapper;
 
 	/**
 	 * Create a new {@link JarFile} backed by the specified file.
@@ -137,7 +139,12 @@ public class JarFile extends AbstractJarFile implements Iterable<java.util.jar.J
 			this.data = parser.parse(data, filter == null);
 		}
 		catch (RuntimeException ex) {
-			close();
+			try {
+				this.rootFile.close();
+				super.close();
+			}
+			catch (IOException ioex) {
+			}
 			throw ex;
 		}
 		this.manifestSupplier = (manifestSupplier != null) ? manifestSupplier : () -> {
@@ -162,7 +169,7 @@ public class JarFile extends AbstractJarFile implements Iterable<java.util.jar.J
 			}
 
 			@Override
-			public void visitFileHeader(CentralDirectoryFileHeader fileHeader, int dataOffset) {
+			public void visitFileHeader(CentralDirectoryFileHeader fileHeader, long dataOffset) {
 				AsciiBytes name = fileHeader.getName();
 				if (name.startsWith(META_INF) && name.endsWith(SIGNATURE_FILE_EXTENSION)) {
 					JarFile.this.signed = true;
@@ -174,6 +181,15 @@ public class JarFile extends AbstractJarFile implements Iterable<java.util.jar.J
 			}
 
 		};
+	}
+
+	JarFileWrapper getWrapper() throws IOException {
+		JarFileWrapper wrapper = this.wrapper;
+		if (wrapper == null) {
+			wrapper = new JarFileWrapper(this);
+			this.wrapper = wrapper;
+		}
+		return wrapper;
 	}
 
 	@Override
@@ -218,8 +234,8 @@ public class JarFile extends AbstractJarFile implements Iterable<java.util.jar.J
 
 	/**
 	 * Return an iterator for the contained entries.
-	 * @see java.lang.Iterable#iterator()
 	 * @since 2.3.0
+	 * @see java.lang.Iterable#iterator()
 	 */
 	@Override
 	@SuppressWarnings({ "unchecked", "rawtypes" })
@@ -254,8 +270,8 @@ public class JarFile extends AbstractJarFile implements Iterable<java.util.jar.J
 	@Override
 	public synchronized InputStream getInputStream(ZipEntry entry) throws IOException {
 		ensureOpen();
-		if (entry instanceof JarEntry) {
-			return this.entries.getInputStream((JarEntry) entry);
+		if (entry instanceof JarEntry jarEntry) {
+			return this.entries.getInputStream(jarEntry);
 		}
 		return getInputStream((entry != null) ? entry.getName() : null);
 	}
@@ -337,10 +353,11 @@ public class JarFile extends AbstractJarFile implements Iterable<java.util.jar.J
 		if (this.closed) {
 			return;
 		}
-		this.closed = true;
+		super.close();
 		if (this.type == JarFileType.DIRECT) {
 			this.rootFile.close();
 		}
+		this.closed = true;
 	}
 
 	private void ensureOpen() {

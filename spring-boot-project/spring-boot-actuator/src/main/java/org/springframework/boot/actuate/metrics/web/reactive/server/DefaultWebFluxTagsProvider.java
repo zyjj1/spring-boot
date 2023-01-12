@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,7 +30,11 @@ import org.springframework.web.server.ServerWebExchange;
  * @author Jon Schneider
  * @author Andy Wilkinson
  * @since 2.0.0
+ * @deprecated since 3.0.0 for removal in 3.2.0 in favor of
+ * {@link org.springframework.http.server.reactive.observation.ServerRequestObservationConvention}
  */
+@Deprecated(since = "3.0.0", forRemoval = true)
+@SuppressWarnings("removal")
 public class DefaultWebFluxTagsProvider implements WebFluxTagsProvider {
 
 	private final boolean ignoreTrailingSlash;
@@ -70,9 +74,12 @@ public class DefaultWebFluxTagsProvider implements WebFluxTagsProvider {
 
 	@Override
 	public Iterable<Tag> httpRequestTags(ServerWebExchange exchange, Throwable exception) {
-		Tags tags = Tags.of(WebFluxTags.method(exchange), WebFluxTags.uri(exchange, this.ignoreTrailingSlash),
-				WebFluxTags.exception(exception), WebFluxTags.status(exchange),
-				WebFluxTags.outcome(exchange, exception));
+		Tags tags = Tags.empty();
+		tags = tags.and(WebFluxTags.method(exchange));
+		tags = tags.and(WebFluxTags.uri(exchange, this.ignoreTrailingSlash));
+		tags = tags.and(WebFluxTags.exception(exception));
+		tags = tags.and(WebFluxTags.status(exchange));
+		tags = tags.and(WebFluxTags.outcome(exchange, exception));
 		for (WebFluxTagsContributor contributor : this.contributors) {
 			tags = tags.and(contributor.httpRequestTags(exchange, exception));
 		}

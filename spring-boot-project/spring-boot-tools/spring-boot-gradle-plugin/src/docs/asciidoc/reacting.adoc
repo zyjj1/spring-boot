@@ -1,12 +1,12 @@
 [[reacting-to-other-plugins]]
-== Reacting to Other Plugins
+= Reacting to Other Plugins
 When another plugin is applied the Spring Boot plugin reacts by making various changes to the project's configuration.
 This section describes those changes.
 
 
 
-[[reacting-to-other-plugins-java]]
-=== Reacting to the Java Plugin
+[[reacting-to-other-plugins.java]]
+== Reacting to the Java Plugin
 When Gradle's {java-plugin}[`java` plugin] is applied to a project, the Spring Boot plugin:
 
 1. Creates a {boot-jar-javadoc}[`BootJar`] task named `bootJar` that will create an executable, fat jar for the project.
@@ -17,13 +17,14 @@ When Gradle's {java-plugin}[`java` plugin] is applied to a project, the Spring B
 5. Creates a {boot-run-javadoc}[`BootRun`] task named `bootRun` that can be used to run your application.
 6. Creates a configuration named `bootArchives` that contains the artifact produced by the `bootJar` task.
 7. Creates a configuration named `developmentOnly` for dependencies that are only required at development time, such as Spring Boot's Devtools, and should not be packaged in executable jars and wars.
-8. Configures any `JavaCompile` tasks with no configured encoding to use `UTF-8`.
-9. Configures any `JavaCompile` tasks to use the `-parameters` compiler argument.
+8. Creates a configuration named `productionRuntimeClasspath`. It is equivalent to `runtimeClasspath` minus any dependencies that only appear in the `developmentOnly` configuration.
+9. Configures any `JavaCompile` tasks with no configured encoding to use `UTF-8`.
+10. Configures any `JavaCompile` tasks to use the `-parameters` compiler argument.
 
 
 
-[[reacting-to-other-plugins-kotlin]]
-=== Reacting to the Kotlin Plugin
+[[reacting-to-other-plugins.kotlin]]
+== Reacting to the Kotlin Plugin
 When {kotlin-plugin}[Kotlin's Gradle plugin] is applied to a project, the Spring Boot plugin:
 
 1. Aligns the Kotlin version used in Spring Boot's dependency management with the version of the plugin.
@@ -32,8 +33,8 @@ When {kotlin-plugin}[Kotlin's Gradle plugin] is applied to a project, the Spring
 
 
 
-[[reacting-to-other-plugins-war]]
-=== Reacting to the War Plugin
+[[reacting-to-other-plugins.war]]
+== Reacting to the War Plugin
 When Gradle's {war-plugin}[`war` plugin] is applied to a project, the Spring Boot plugin:
 
 1. Creates a {boot-war-javadoc}[`BootWar`] task named `bootWar` that will create an executable, fat war for the project.
@@ -44,14 +45,14 @@ When Gradle's {war-plugin}[`war` plugin] is applied to a project, the Spring Boo
 
 
 
-[[reacting-to-other-plugins-dependency-management]]
-=== Reacting to the Dependency Management Plugin
+[[reacting-to-other-plugins.dependency-management]]
+== Reacting to the Dependency Management Plugin
 When the {dependency-management-plugin}[`io.spring.dependency-management` plugin] is applied to a project, the Spring Boot plugin will automatically import the `spring-boot-dependencies` bom.
 
 
 
-[[reacting-to-other-plugins-application]]
-=== Reacting to the Application Plugin
+[[reacting-to-other-plugins.application]]
+== Reacting to the Application Plugin
 When Gradle's {application-plugin}[`application` plugin] is applied to a project, the Spring Boot plugin:
 
 1. Creates a `CreateStartScripts` task named `bootStartScripts` that will create scripts that launch the artifact in the `bootArchives` configuration using `java -jar`.
@@ -64,9 +65,21 @@ When Gradle's {application-plugin}[`application` plugin] is applied to a project
 
 
 
-[[reacting-to-other-plugins-maven]]
-=== Reacting to the Maven plugin
-WARNING: Support for reacting to Gradle's `maven` plugin is deprecated and will be removed in a future release.
-Please use the `maven-publish` plugin instead.
+[[reacting-to-other-plugins.nbt]]
+== Reacting to the GraalVM Native Image Plugin
+When the {nbt-gradle-plugin}[GraalVM Native Image plugin] is applied to a project, the Spring Boot plugin:
 
-When Gradle's {maven-plugin}[`maven` plugin] is applied to a project, the Spring Boot plugin will configure the `uploadBootArchives` `Upload` task to ensure that no dependencies are declared in the pom that it generates.
+. Applies the `org.springframework.boot.aot` plugin that:
+.. Registers `aot` and `aotTest` source sets.
+.. Registers a `ProcessAot` task named `processAot` that will generate AOT-optimized source for the application in the `aot` source set.
+.. Configures the Java compilation and process resources tasks for the `aot` source set to depend upon `processAot`.
+.. Registers a `ProcessTestAot` task named `processTestAot` that will generated AOT-optimized source for the application's tests in the `aotTest` source set.
+.. Configures the Java compilation and process resources tasks for the `aotTest` source set to depend upon `processTestAot`.
+. Adds the output of the `aot` source set to the classpath of the `main` GraalVM native binary.
+. Adds the output of the `aotTest` source set to the classpath of the `test` GraalVM native binary.
+. Configures the GraalVM extension to disable Toolchain detection.
+. Configures each GraalVM native binary to require GraalVM 22.3 or later.
+. Configures the `bootJar` task to include the reachability metadata produced by the `collectReachabilityMetadata` task in its jar.
+. Configures the `bootBuildImage` task to use `paketobuildpacks/builder:tiny` as its builder and to set `BP_NATIVE_IMAGE` to `true` in its environment.
+
+

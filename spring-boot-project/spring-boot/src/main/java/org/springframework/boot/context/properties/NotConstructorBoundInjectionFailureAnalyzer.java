@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import org.springframework.beans.factory.InjectionPoint;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.beans.factory.UnsatisfiedDependencyException;
 import org.springframework.boot.context.properties.ConfigurationPropertiesBean.BindMethod;
+import org.springframework.boot.context.properties.bind.ConstructorBinding;
 import org.springframework.boot.diagnostics.FailureAnalysis;
 import org.springframework.boot.diagnostics.analyzer.AbstractInjectionFailureAnalyzer;
 import org.springframework.core.Ordered;
@@ -29,7 +30,7 @@ import org.springframework.core.annotation.MergedAnnotation;
 import org.springframework.core.annotation.MergedAnnotations;
 
 /**
- * An {@AbstractInjectionFailureAnalyzer} for
+ * An {@link AbstractInjectionFailureAnalyzer} for
  * {@link ConfigurationProperties @ConfigurationProperties} that are intended to use
  * {@link ConstructorBinding constructor binding} but did not.
  *
@@ -66,7 +67,7 @@ class NotConstructorBoundInjectionFailureAnalyzer
 			MergedAnnotation<ConfigurationProperties> configurationProperties = MergedAnnotations.from(declaringClass)
 					.get(ConfigurationProperties.class);
 			return configurationProperties.isPresent()
-					&& BindMethod.forType(constructor.getDeclaringClass()) == BindMethod.VALUE_OBJECT;
+					&& BindMethod.get(constructor.getDeclaringClass()) == BindMethod.VALUE_OBJECT;
 		}
 		return false;
 	}

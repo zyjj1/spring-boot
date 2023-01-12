@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,15 +43,16 @@ public class MavenExec extends JavaExec {
 
 	private File projectDir;
 
-	public MavenExec() throws IOException {
+	public MavenExec() {
 		setClasspath(mavenConfiguration(getProject()));
 		args("--batch-mode");
-		setMain("org.apache.maven.cli.MavenCli");
+		getMainClass().set("org.apache.maven.cli.MavenCli");
 	}
 
 	public void setProjectDir(File projectDir) {
 		this.projectDir = projectDir;
-		getInputs().file(new File(projectDir, "pom.xml")).withPathSensitivity(PathSensitivity.RELATIVE);
+		getInputs().file(new File(projectDir, "pom.xml")).withPathSensitivity(PathSensitivity.RELATIVE)
+				.withPropertyName("pom");
 	}
 
 	@Override

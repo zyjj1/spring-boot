@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,15 +18,13 @@ package org.springframework.boot.maven;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.jar.JarFile;
-import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.TestTemplate;
-import org.junit.jupiter.api.condition.DisabledForJreRange;
-import org.junit.jupiter.api.condition.JRE;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.springframework.boot.loader.tools.FileUtils;
@@ -40,6 +38,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Andy Wilkinson
  * @author Madhura Bhave
+ * @author Scott Frederick
  */
 @ExtendWith(MavenBuildExtension.class)
 class JarIntegrationTests extends AbstractArchiveIntegrationTests {
@@ -63,7 +62,7 @@ class JarIntegrationTests extends AbstractArchiveIntegrationTests {
 			}).hasEntryWithNameStartingWith("BOOT-INF/lib/spring-context")
 					.hasEntryWithNameStartingWith("BOOT-INF/lib/spring-core")
 					.hasEntryWithNameStartingWith("BOOT-INF/lib/spring-jcl")
-					.hasEntryWithNameStartingWith("BOOT-INF/lib/jakarta.servlet-api-4")
+					.hasEntryWithNameStartingWith("BOOT-INF/lib/jakarta.servlet-api-6")
 					.hasEntryWithName("BOOT-INF/classes/org/test/SampleApplication.class")
 					.hasEntryWithName("org/springframework/boot/loader/JarLauncher.class");
 			assertThat(buildLog(project)).contains("Replacing main artifact with repackaged archive")
@@ -249,7 +248,6 @@ class JarIntegrationTests extends AbstractArchiveIntegrationTests {
 		});
 	}
 
-	@DisabledForJreRange(min = JRE.JAVA_16) // Remove this once Kotlin supports Java 16
 	@TestTemplate
 	void whenAProjectUsesKotlinItsModuleMetadataIsRepackagedIntoBootInfClasses(MavenBuild mavenBuild) {
 		mavenBuild.project("jar-with-kotlin-module").execute((project) -> {
@@ -367,6 +365,20 @@ class JarIntegrationTests extends AbstractArchiveIntegrationTests {
 	}
 
 	@TestTemplate
+	void repackagedJarContainsClasspathIndex(MavenBuild mavenBuild) {
+		mavenBuild.project("jar").execute((project) -> {
+			File repackaged = new File(project, "target/jar-0.0.1.BUILD-SNAPSHOT.jar");
+			assertThat(jar(repackaged)).manifest(
+					(manifest) -> manifest.hasAttribute("Spring-Boot-Classpath-Index", "BOOT-INF/classpath.idx"));
+			assertThat(jar(repackaged)).hasEntryWithName("BOOT-INF/classpath.idx");
+			try (JarFile jarFile = new JarFile(repackaged)) {
+				List<String> index = readClasspathIndex(jarFile, "BOOT-INF/classpath.idx");
+				assertThat(index).allMatch((entry) -> entry.startsWith("BOOT-INF/lib/"));
+			}
+		});
+	}
+
+	@TestTemplate
 	void whenJarIsRepackagedWithOutputTimestampConfiguredThenJarIsReproducible(MavenBuild mavenBuild)
 			throws InterruptedException {
 		String firstHash = buildJarWithOutputTimestamp(mavenBuild);
@@ -384,8 +396,7 @@ class JarIntegrationTests extends AbstractArchiveIntegrationTests {
 			try (JarFile jar = new JarFile(repackaged)) {
 				List<String> unreproducibleEntries = jar.stream()
 						.filter((entry) -> entry.getLastModifiedTime().toMillis() != 1584352800000L)
-						.map((entry) -> entry.getName() + ": " + entry.getLastModifiedTime())
-						.collect(Collectors.toList());
+						.map((entry) -> entry.getName() + ": " + entry.getLastModifiedTime()).toList();
 				assertThat(unreproducibleEntries).isEmpty();
 				jarHash.set(FileUtils.sha1Hash(repackaged));
 				FileSystemUtils.deleteRecursively(project);
@@ -395,6 +406,19 @@ class JarIntegrationTests extends AbstractArchiveIntegrationTests {
 			}
 		});
 		return jarHash.get();
+	}
+
+	@TestTemplate
+	void whenJarIsRepackagedWithOutputTimestampConfiguredThenLibrariesAreSorted(MavenBuild mavenBuild) {
+		mavenBuild.project("jar-output-timestamp").execute((project) -> {
+			File repackaged = new File(project, "target/jar-output-timestamp-0.0.1.BUILD-SNAPSHOT.jar");
+			List<String> sortedLibs = Arrays.asList("BOOT-INF/lib/jakarta.servlet-api", "BOOT-INF/lib/spring-aop",
+					"BOOT-INF/lib/spring-beans", "BOOT-INF/lib/spring-boot-jarmode-layertools",
+					"BOOT-INF/lib/spring-context", "BOOT-INF/lib/spring-core", "BOOT-INF/lib/spring-expression",
+					"BOOT-INF/lib/spring-jcl");
+			assertThat(jar(repackaged)).entryNamesInPath("BOOT-INF/lib/").zipSatisfy(sortedLibs,
+					(String jarLib, String expectedLib) -> assertThat(jarLib).startsWith(expectedLib));
+		});
 	}
 
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -133,16 +133,20 @@ class DirectoryBuildpackTests {
 				entries.add(entry);
 				entry = tar.getNextTarEntry();
 			}
-			assertThat(entries).extracting("name", "mode").containsExactlyInAnyOrder(
+			assertThat(entries).extracting("name", "mode").containsExactlyInAnyOrder(tuple("/cnb/", 0755),
+					tuple("/cnb/buildpacks/", 0755), tuple("/cnb/buildpacks/example_buildpack1/", 0755),
+					tuple("/cnb/buildpacks/example_buildpack1/0.0.1/", 0755),
 					tuple("/cnb/buildpacks/example_buildpack1/0.0.1/buildpack.toml", 0644),
+					tuple("/cnb/buildpacks/example_buildpack1/0.0.1/bin/", 0755),
 					tuple("/cnb/buildpacks/example_buildpack1/0.0.1/bin/detect", 0744),
 					tuple("/cnb/buildpacks/example_buildpack1/0.0.1/bin/build", 0744));
 		}
 	}
 
 	private void writeBuildpackDescriptor() throws IOException {
-		File descriptor = new File(this.buildpackDir, "buildpack.toml");
-		try (PrintWriter writer = new PrintWriter(Files.newBufferedWriter(descriptor.toPath()))) {
+		Path descriptor = Files.createFile(Paths.get(this.buildpackDir.getAbsolutePath(), "buildpack.toml"),
+				PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-r--r--")));
+		try (PrintWriter writer = new PrintWriter(Files.newBufferedWriter(descriptor))) {
 			writer.println("[buildpack]");
 			writer.println("id = \"example/buildpack1\"");
 			writer.println("version = \"0.0.1\"");
@@ -154,15 +158,16 @@ class DirectoryBuildpackTests {
 	}
 
 	private void writeScripts() throws IOException {
-		File binDirectory = new File(this.buildpackDir, "bin");
-		binDirectory.mkdirs();
-		Path detect = Files.createFile(Paths.get(binDirectory.getAbsolutePath(), "detect"),
+		Path binDirectory = Files.createDirectory(Paths.get(this.buildpackDir.getAbsolutePath(), "bin"),
+				PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr-xr-x")));
+		binDirectory.toFile().mkdirs();
+		Path detect = Files.createFile(Paths.get(binDirectory.toString(), "detect"),
 				PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr--r--")));
 		try (PrintWriter writer = new PrintWriter(Files.newBufferedWriter(detect))) {
 			writer.println("#!/usr/bin/env bash");
 			writer.println("echo \"---> detect\"");
 		}
-		Path build = Files.createFile(Paths.get(binDirectory.getAbsolutePath(), "build"),
+		Path build = Files.createFile(Paths.get(binDirectory.toString(), "build"),
 				PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwxr--r--")));
 		try (PrintWriter writer = new PrintWriter(Files.newBufferedWriter(build))) {
 			writer.println("#!/usr/bin/env bash");

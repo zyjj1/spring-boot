@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,13 +22,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Random;
+import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.TestTemplate;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.springframework.boot.buildpack.platform.docker.DockerApi;
+import org.springframework.boot.buildpack.platform.docker.DockerApi.VolumeApi;
 import org.springframework.boot.buildpack.platform.docker.type.ImageName;
 import org.springframework.boot.buildpack.platform.docker.type.ImageReference;
+import org.springframework.boot.buildpack.platform.docker.type.VolumeName;
 import org.springframework.boot.testsupport.testcontainers.DisabledIfDockerUnavailable;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,10 +41,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Stephane Nicoll
  * @author Scott Frederick
+ * @author Rafael Ceccone
  */
 @ExtendWith(MavenBuildExtension.class)
 @DisabledIfDockerUnavailable
-public class BuildImageTests extends AbstractArchiveIntegrationTests {
+class BuildImageTests extends AbstractArchiveIntegrationTests {
 
 	@TestTemplate
 	void whenBuildImageIsInvokedWithoutRepackageTheArchiveIsRepackagedOnTheFly(MavenBuild mavenBuild) {
@@ -54,9 +58,26 @@ public class BuildImageTests extends AbstractArchiveIntegrationTests {
 					assertThat(original).doesNotExist();
 					assertThat(buildLog(project)).contains("Building image")
 							.contains("docker.io/library/build-image:0.0.1.BUILD-SNAPSHOT")
-							.contains("---> Test Info buildpack building").contains("env: BP_JVM_VERSION=8.*")
-							.contains("---> Test Info buildpack done").contains("Successfully built image");
+							.contains("---> Test Info buildpack building").contains("---> Test Info buildpack done")
+							.contains("Successfully built image");
 					removeImage("build-image", "0.0.1.BUILD-SNAPSHOT");
+				});
+	}
+
+	@TestTemplate
+	void whenBuildImageIsInvokedOnTheCommandLineWithoutRepackageTheArchiveIsRepackagedOnTheFly(MavenBuild mavenBuild) {
+		mavenBuild.project("build-image-cmd-line").goals("spring-boot:build-image")
+				.systemProperty("spring-boot.build-image.pullPolicy", "IF_NOT_PRESENT")
+				.prepare(this::writeLongNameResource).execute((project) -> {
+					File jar = new File(project, "target/build-image-cmd-line-0.0.1.BUILD-SNAPSHOT.jar");
+					assertThat(jar).isFile();
+					File original = new File(project, "target/build-image-cmd-line-0.0.1.BUILD-SNAPSHOT.jar.original");
+					assertThat(original).doesNotExist();
+					assertThat(buildLog(project)).contains("Building image")
+							.contains("docker.io/library/build-image-cmd-line:0.0.1.BUILD-SNAPSHOT")
+							.contains("---> Test Info buildpack building").contains("---> Test Info buildpack done")
+							.contains("Successfully built image");
+					removeImage("build-image-cmd-line", "0.0.1.BUILD-SNAPSHOT");
 				});
 	}
 
@@ -71,8 +92,8 @@ public class BuildImageTests extends AbstractArchiveIntegrationTests {
 					assertThat(classifier).doesNotExist();
 					assertThat(buildLog(project)).contains("Building image")
 							.contains("docker.io/library/build-image-classifier:0.0.1.BUILD-SNAPSHOT")
-							.contains("---> Test Info buildpack building").contains("env: BP_JVM_VERSION=8.*")
-							.contains("---> Test Info buildpack done").contains("Successfully built image");
+							.contains("---> Test Info buildpack building").contains("---> Test Info buildpack done")
+							.contains("Successfully built image");
 					removeImage("build-image-classifier", "0.0.1.BUILD-SNAPSHOT");
 				});
 	}
@@ -194,8 +215,10 @@ public class BuildImageTests extends AbstractArchiveIntegrationTests {
 		mavenBuild.project("build-image").goals("package")
 				.systemProperty("spring-boot.build-image.pullPolicy", "IF_NOT_PRESENT")
 				.systemProperty("spring-boot.build-image.imageName", "example.com/test/cmd-property-name:v1")
-				.systemProperty("spring-boot.build-image.builder", "springci/spring-boot-cnb-builder:0.0.1")
-				.systemProperty("spring-boot.build-image.runImage", "paketobuildpacks/run:tiny-cnb")
+				.systemProperty("spring-boot.build-image.builder",
+						"projects.registry.vmware.com/springboot/spring-boot-cnb-builder:0.0.1")
+				.systemProperty("spring-boot.build-image.runImage",
+						"projects.registry.vmware.com/springboot/run:tiny-cnb")
 				.execute((project) -> {
 					assertThat(buildLog(project)).contains("Building image")
 							.contains("example.com/test/cmd-property-name:v1")
@@ -219,8 +242,9 @@ public class BuildImageTests extends AbstractArchiveIntegrationTests {
 
 	@TestTemplate
 	void whenBuildImageIsInvokedWithEmptyEnvEntry(MavenBuild mavenBuild) {
-		mavenBuild.project("build-image-empty-env-entry").goals("package").prepare(this::writeLongNameResource)
-				.systemProperty("spring-boot.build-image.pullPolicy", "IF_NOT_PRESENT").execute((project) -> {
+		mavenBuild.project("build-image-empty-env-entry").goals("package")
+				.systemProperty("spring-boot.build-image.pullPolicy", "IF_NOT_PRESENT")
+				.prepare(this::writeLongNameResource).execute((project) -> {
 					assertThat(buildLog(project)).contains("Building image")
 							.contains("docker.io/library/build-image-empty-env-entry:0.0.1.BUILD-SNAPSHOT")
 							.contains("---> Test Info buildpack building").contains("---> Test Info buildpack done")
@@ -230,14 +254,27 @@ public class BuildImageTests extends AbstractArchiveIntegrationTests {
 	}
 
 	@TestTemplate
+	void whenBuildImageIsInvokedWithZipPackaging(MavenBuild mavenBuild) {
+		mavenBuild.project("build-image-zip-packaging").goals("package").prepare(this::writeLongNameResource)
+				.systemProperty("spring-boot.build-image.pullPolicy", "IF_NOT_PRESENT").execute((project) -> {
+					File jar = new File(project, "target/build-image-zip-packaging-0.0.1.BUILD-SNAPSHOT.jar");
+					assertThat(jar).isFile();
+					assertThat(buildLog(project)).contains("Building image")
+							.contains("docker.io/library/build-image-zip-packaging:0.0.1.BUILD-SNAPSHOT")
+							.contains("Main-Class: org.springframework.boot.loader.PropertiesLauncher")
+							.contains("Successfully built image");
+					removeImage("build-image-zip-packaging", "0.0.1.BUILD-SNAPSHOT");
+				});
+	}
+
+	@TestTemplate
 	void whenBuildImageIsInvokedWithBuildpacks(MavenBuild mavenBuild) {
 		mavenBuild.project("build-image-custom-buildpacks").goals("package")
 				.systemProperty("spring-boot.build-image.pullPolicy", "IF_NOT_PRESENT").execute((project) -> {
 					assertThat(buildLog(project)).contains("Building image")
 							.contains("docker.io/library/build-image-custom-buildpacks:0.0.1.BUILD-SNAPSHOT")
-							.contains("---> Test Info buildpack building").contains("---> Test Info buildpack done")
 							.contains("Successfully built image");
-					removeImage("docker.io/library/build-image-custom-buildpacks", "0.0.1.BUILD-SNAPSHOT");
+					removeImage("build-image-custom-buildpacks", "0.0.1.BUILD-SNAPSHOT");
 				});
 	}
 
@@ -247,18 +284,67 @@ public class BuildImageTests extends AbstractArchiveIntegrationTests {
 				.systemProperty("spring-boot.build-image.pullPolicy", "IF_NOT_PRESENT").execute((project) -> {
 					assertThat(buildLog(project)).contains("Building image")
 							.contains("docker.io/library/build-image-bindings:0.0.1.BUILD-SNAPSHOT")
-							.contains("---> Test Info buildpack building")
 							.contains("binding: ca-certificates/type=ca-certificates")
-							.contains("binding: ca-certificates/test1.crt=---certificate one---")
-							.contains("binding: ca-certificates/test2.crt=---certificate two---");
-					removeImage("docker.io/library/build-image-bindings", "0.0.1.BUILD-SNAPSHOT");
+							.contains("binding: ca-certificates/test.crt=---certificate one---")
+							.contains("Successfully built image");
+					removeImage("build-image-bindings", "0.0.1.BUILD-SNAPSHOT");
 				});
 	}
 
 	@TestTemplate
-	void failsWhenPublishWithoutPublishRegistryConfigured(MavenBuild mavenBuild) {
-		mavenBuild.project("build-image").goals("package").systemProperty("spring-boot.build-image.publish", "true")
-				.executeAndFail((project) -> assertThat(buildLog(project)).contains("requires docker.publishRegistry"));
+	void whenBuildImageIsInvokedWithNetworkModeNone(MavenBuild mavenBuild) {
+		mavenBuild.project("build-image-network").goals("package")
+				.systemProperty("spring-boot.build-image.pullPolicy", "IF_NOT_PRESENT").execute((project) -> {
+					assertThat(buildLog(project)).contains("Building image")
+							.contains("docker.io/library/build-image-network:0.0.1.BUILD-SNAPSHOT")
+							.contains("Network status: curl failed").contains("Successfully built image");
+					removeImage("build-image-network", "0.0.1.BUILD-SNAPSHOT");
+				});
+	}
+
+	@TestTemplate
+	void whenBuildImageIsInvokedOnMultiModuleProjectWithPackageGoal(MavenBuild mavenBuild) {
+		mavenBuild.project("build-image-multi-module").goals("package")
+				.systemProperty("spring-boot.build-image.pullPolicy", "IF_NOT_PRESENT").execute((project) -> {
+					assertThat(buildLog(project)).contains("Building image")
+							.contains("docker.io/library/build-image-multi-module-app:0.0.1.BUILD-SNAPSHOT")
+							.contains("Successfully built image");
+					removeImage("build-image-multi-module-app", "0.0.1.BUILD-SNAPSHOT");
+				});
+	}
+
+	@TestTemplate
+	void whenBuildImageIsInvokedWithTags(MavenBuild mavenBuild) {
+		mavenBuild.project("build-image-tags").goals("package")
+				.systemProperty("spring-boot.build-image.pullPolicy", "IF_NOT_PRESENT").execute((project) -> {
+					assertThat(buildLog(project)).contains("Building image")
+							.contains("docker.io/library/build-image-tags:0.0.1.BUILD-SNAPSHOT")
+							.contains("Successfully built image").contains("docker.io/library/build-image-tags:latest")
+							.contains("Successfully created image tag");
+					removeImage("build-image-tags", "0.0.1.BUILD-SNAPSHOT");
+					removeImage("build-image-tags", "latest");
+				});
+	}
+
+	@TestTemplate
+	void whenBuildImageIsInvokedWithVolumeCaches(MavenBuild mavenBuild) {
+		String testBuildId = randomString();
+		mavenBuild.project("build-image-caches").goals("package")
+				.systemProperty("spring-boot.build-image.pullPolicy", "IF_NOT_PRESENT")
+				.systemProperty("test-build-id", testBuildId).execute((project) -> {
+					assertThat(buildLog(project)).contains("Building image")
+							.contains("docker.io/library/build-image-caches:0.0.1.BUILD-SNAPSHOT")
+							.contains("Successfully built image");
+					removeImage("build-image-caches", "0.0.1.BUILD-SNAPSHOT");
+					deleteVolumes("cache-" + testBuildId + ".build", "cache-" + testBuildId + ".launch");
+				});
+	}
+
+	@TestTemplate
+	void failsWhenBuildImageIsInvokedOnMultiModuleProjectWithBuildImageGoal(MavenBuild mavenBuild) {
+		mavenBuild.project("build-image-multi-module").goals("spring-boot:build-image")
+				.systemProperty("spring-boot.build-image.pullPolicy", "IF_NOT_PRESENT").executeAndFail(
+						(project) -> assertThat(buildLog(project)).contains("Error packaging archive for image"));
 	}
 
 	@TestTemplate
@@ -285,6 +371,13 @@ public class BuildImageTests extends AbstractArchiveIntegrationTests {
 						.contains("is required for building an image"));
 	}
 
+	@TestTemplate
+	void failsWhenCachesAreConfiguredTwice(MavenBuild mavenBuild) {
+		mavenBuild.project("build-image-caches-multiple").goals("package")
+				.executeAndFail((project) -> assertThat(buildLog(project))
+						.contains("Each image building cache can be configured only once"));
+	}
+
 	private void writeLongNameResource(File project) {
 		StringBuilder name = new StringBuilder();
 		new Random().ints('a', 'z' + 1).limit(128).forEach((i) -> name.append((char) i));
@@ -306,6 +399,18 @@ public class BuildImageTests extends AbstractArchiveIntegrationTests {
 		catch (IOException ex) {
 			throw new IllegalStateException("Failed to remove docker image " + imageReference, ex);
 		}
+	}
+
+	private void deleteVolumes(String... names) throws IOException {
+		VolumeApi volumeApi = new DockerApi().volume();
+		for (String name : names) {
+			volumeApi.delete(VolumeName.of(name), false);
+		}
+	}
+
+	private String randomString() {
+		IntStream chars = new Random().ints('a', 'z' + 1).limit(10);
+		return chars.collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append).toString();
 	}
 
 }

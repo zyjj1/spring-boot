@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,10 @@
 
 package org.springframework.boot.context.config;
 
+import java.io.File;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
@@ -26,12 +28,14 @@ import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.apache.commons.logging.Log;
 
 import org.springframework.boot.context.config.LocationResourceLoader.ResourceType;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.env.PropertySourceLoader;
+import org.springframework.boot.logging.DeferredLogFactory;
 import org.springframework.core.Ordered;
 import org.springframework.core.env.Environment;
 import org.springframework.core.io.ClassPathResource;
@@ -40,6 +44,7 @@ import org.springframework.core.io.ResourceLoader;
 import org.springframework.core.io.support.SpringFactoriesLoader;
 import org.springframework.core.log.LogMessage;
 import org.springframework.util.Assert;
+import org.springframework.util.ObjectUtils;
 import org.springframework.util.StringUtils;
 
 /**
@@ -57,7 +62,7 @@ public class StandardConfigDataLocationResolver
 
 	static final String CONFIG_NAME_PROPERTY = "spring.config.name";
 
-	private static final String[] DEFAULT_CONFIG_NAMES = { "application" };
+	static final String[] DEFAULT_CONFIG_NAMES = { "application" };
 
 	private static final Pattern URL_PREFIX = Pattern.compile("^([a-zA-Z][a-zA-Z0-9*]*?:)(.*$)");
 
@@ -75,12 +80,13 @@ public class StandardConfigDataLocationResolver
 
 	/**
 	 * Create a new {@link StandardConfigDataLocationResolver} instance.
-	 * @param logger the logger to use
+	 * @param logFactory the factory for loggers to use
 	 * @param binder a binder backed by the initial {@link Environment}
 	 * @param resourceLoader a {@link ResourceLoader} used to load resources
 	 */
-	public StandardConfigDataLocationResolver(Log logger, Binder binder, ResourceLoader resourceLoader) {
-		this.logger = logger;
+	public StandardConfigDataLocationResolver(DeferredLogFactory logFactory, Binder binder,
+			ResourceLoader resourceLoader) {
+		this.logger = logFactory.getLog(StandardConfigDataLocationResolver.class);
 		this.propertySourceLoaders = SpringFactoriesLoader.loadFactories(PropertySourceLoader.class,
 				getClass().getClassLoader());
 		this.configNames = getConfigNames(binder);
@@ -112,7 +118,16 @@ public class StandardConfigDataLocationResolver
 	@Override
 	public List<StandardConfigDataResource> resolve(ConfigDataLocationResolverContext context,
 			ConfigDataLocation location) throws ConfigDataNotFoundException {
-		return resolve(getReferences(context, location));
+		return resolve(getReferences(context, location.split()));
+	}
+
+	private Set<StandardConfigDataReference> getReferences(ConfigDataLocationResolverContext context,
+			ConfigDataLocation[] configDataLocations) {
+		Set<StandardConfigDataReference> references = new LinkedHashSet<>();
+		for (ConfigDataLocation configDataLocation : configDataLocations) {
+			references.addAll(getReferences(context, configDataLocation));
+		}
+		return references;
 	}
 
 	private Set<StandardConfigDataReference> getReferences(ConfigDataLocationResolverContext context,
@@ -132,15 +147,17 @@ public class StandardConfigDataLocationResolver
 	@Override
 	public List<StandardConfigDataResource> resolveProfileSpecific(ConfigDataLocationResolverContext context,
 			ConfigDataLocation location, Profiles profiles) {
-		return resolve(getProfileSpecificReferences(context, location, profiles));
+		return resolve(getProfileSpecificReferences(context, location.split(), profiles));
 	}
 
 	private Set<StandardConfigDataReference> getProfileSpecificReferences(ConfigDataLocationResolverContext context,
-			ConfigDataLocation configDataLocation, Profiles profiles) {
+			ConfigDataLocation[] configDataLocations, Profiles profiles) {
 		Set<StandardConfigDataReference> references = new LinkedHashSet<>();
-		String resourceLocation = getResourceLocation(context, configDataLocation);
 		for (String profile : profiles) {
-			references.addAll(getReferences(configDataLocation, resourceLocation, profile));
+			for (ConfigDataLocation configDataLocation : configDataLocations) {
+				String resourceLocation = getResourceLocation(context, configDataLocation);
+				references.addAll(getReferences(configDataLocation, resourceLocation, profile));
+			}
 		}
 		return references;
 	}
@@ -153,8 +170,8 @@ public class StandardConfigDataLocationResolver
 			return resourceLocation;
 		}
 		ConfigDataResource parent = context.getParent();
-		if (parent instanceof StandardConfigDataResource) {
-			String parentResourceLocation = ((StandardConfigDataResource) parent).getReference().getResourceLocation();
+		if (parent instanceof StandardConfigDataResource resource) {
+			String parentResourceLocation = resource.getReference().getResourceLocation();
 			String parentDirectory = parentResourceLocation.substring(0, parentResourceLocation.lastIndexOf("/") + 1);
 			return parentDirectory + resourceLocation;
 		}
@@ -212,7 +229,7 @@ public class StandardConfigDataLocationResolver
 			}
 		}
 		throw new IllegalStateException("File extension is not known to any PropertySourceLoader. "
-				+ "If the location is meant to reference a directory, it must end in '/'");
+				+ "If the location is meant to reference a directory, it must end in '/' or File.separator");
 	}
 
 	private String getLoadableFileExtension(PropertySourceLoader loader, String file) {
@@ -225,7 +242,7 @@ public class StandardConfigDataLocationResolver
 	}
 
 	private boolean isDirectory(String resourceLocation) {
-		return resourceLocation.endsWith("/");
+		return resourceLocation.endsWith("/") || resourceLocation.endsWith(File.separator);
 	}
 
 	private List<StandardConfigDataResource> resolve(Set<StandardConfigDataReference> references) {
@@ -243,17 +260,36 @@ public class StandardConfigDataLocationResolver
 			Set<StandardConfigDataReference> references) {
 		Set<StandardConfigDataResource> empty = new LinkedHashSet<>();
 		for (StandardConfigDataReference reference : references) {
-			if (reference.isMandatoryDirectory()) {
-				Resource resource = this.resourceLoader.getResource(reference.getDirectory());
-				if (resource instanceof ClassPathResource) {
-					continue;
-				}
-				StandardConfigDataResource configDataResource = new StandardConfigDataResource(reference, resource);
-				ConfigDataResourceNotFoundException.throwIfDoesNotExist(configDataResource, resource);
-				empty.add(new StandardConfigDataResource(reference, resource, true));
+			if (reference.getDirectory() != null) {
+				empty.addAll(resolveEmptyDirectories(reference));
 			}
 		}
 		return empty;
+	}
+
+	private Set<StandardConfigDataResource> resolveEmptyDirectories(StandardConfigDataReference reference) {
+		if (!this.resourceLoader.isPattern(reference.getResourceLocation())) {
+			return resolveNonPatternEmptyDirectories(reference);
+		}
+		return resolvePatternEmptyDirectories(reference);
+	}
+
+	private Set<StandardConfigDataResource> resolveNonPatternEmptyDirectories(StandardConfigDataReference reference) {
+		Resource resource = this.resourceLoader.getResource(reference.getDirectory());
+		return (resource instanceof ClassPathResource || !resource.exists()) ? Collections.emptySet()
+				: Collections.singleton(new StandardConfigDataResource(reference, resource, true));
+	}
+
+	private Set<StandardConfigDataResource> resolvePatternEmptyDirectories(StandardConfigDataReference reference) {
+		Resource[] subdirectories = this.resourceLoader.getResources(reference.getDirectory(), ResourceType.DIRECTORY);
+		ConfigDataLocation location = reference.getConfigDataLocation();
+		if (!location.isOptional() && ObjectUtils.isEmpty(subdirectories)) {
+			String message = String.format("Config data location '%s' contains no subdirectories", location);
+			throw new ConfigDataLocationNotFoundException(location, message, null);
+		}
+		return Arrays.stream(subdirectories).filter(Resource::exists)
+				.map((resource) -> new StandardConfigDataResource(reference, resource, true))
+				.collect(Collectors.toCollection(LinkedHashSet::new));
 	}
 
 	private List<StandardConfigDataResource> resolve(StandardConfigDataReference reference) {

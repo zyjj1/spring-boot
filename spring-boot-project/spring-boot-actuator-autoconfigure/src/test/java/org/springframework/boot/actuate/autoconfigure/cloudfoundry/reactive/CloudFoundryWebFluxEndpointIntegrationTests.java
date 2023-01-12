@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package org.springframework.boot.actuate.autoconfigure.cloudfoundry.reactive;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
@@ -70,9 +71,9 @@ import static org.mockito.Mockito.mock;
  */
 class CloudFoundryWebFluxEndpointIntegrationTests {
 
-	private static ReactiveTokenValidator tokenValidator = mock(ReactiveTokenValidator.class);
+	private static final ReactiveTokenValidator tokenValidator = mock(ReactiveTokenValidator.class);
 
-	private static ReactiveCloudFoundrySecurityService securityService = mock(
+	private static final ReactiveCloudFoundrySecurityService securityService = mock(
 			ReactiveCloudFoundrySecurityService.class);
 
 	private final ReactiveWebApplicationContextRunner contextRunner = new ReactiveWebApplicationContextRunner(
@@ -151,7 +152,8 @@ class CloudFoundryWebFluxEndpointIntegrationTests {
 		return (context) -> {
 			int port = ((AnnotationConfigReactiveWebServerApplicationContext) context.getSourceApplicationContext())
 					.getWebServer().getPort();
-			clientConsumer.accept(WebTestClient.bindToServer().baseUrl("http://localhost:" + port).build());
+			clientConsumer.accept(WebTestClient.bindToServer().baseUrl("http://localhost:" + port)
+					.responseTimeout(Duration.ofMinutes(5)).build());
 		};
 	}
 

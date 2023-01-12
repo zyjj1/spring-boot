@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import org.gradle.api.DefaultTask;
 import org.gradle.api.Task;
@@ -94,36 +93,34 @@ public class DocumentPluginGoals extends DefaultTask {
 			writer.println();
 			writer.println();
 			writer.printf("[[%s]]%n", sectionId);
-			writer.printf("== `%s:%s`%n", plugin.getGoalPrefix(), mojo.getGoal());
+			writer.printf("= `%s:%s`%n", plugin.getGoalPrefix(), mojo.getGoal());
 			writer.printf("`%s:%s:%s`%n", plugin.getGroupId(), plugin.getArtifactId(), plugin.getVersion());
 			writer.println();
 			writer.println(mojo.getDescription());
-			List<Parameter> parameters = mojo.getParameters().stream().filter(Parameter::isEditable)
-					.collect(Collectors.toList());
-			List<Parameter> requiredParameters = parameters.stream().filter(Parameter::isRequired)
-					.collect(Collectors.toList());
+			List<Parameter> parameters = mojo.getParameters().stream().filter(Parameter::isEditable).toList();
+			List<Parameter> requiredParameters = parameters.stream().filter(Parameter::isRequired).toList();
 			String parametersSectionId = sectionId + "-parameters";
 			String detailsSectionId = parametersSectionId + "-details";
 			if (!requiredParameters.isEmpty()) {
 				writer.println();
 				writer.println();
 				writer.printf("[[%s-required]]%n", parametersSectionId);
-				writer.println("=== Required parameters");
+				writer.println("== Required parameters");
 				writeParametersTable(writer, detailsSectionId, requiredParameters);
 			}
 			List<Parameter> optionalParameters = parameters.stream().filter((parameter) -> !parameter.isRequired())
-					.collect(Collectors.toList());
+					.toList();
 			if (!optionalParameters.isEmpty()) {
 				writer.println();
 				writer.println();
 				writer.printf("[[%s-optional]]%n", parametersSectionId);
-				writer.println("=== Optional parameters");
+				writer.println("== Optional parameters");
 				writeParametersTable(writer, detailsSectionId, optionalParameters);
 			}
 			writer.println();
 			writer.println();
 			writer.printf("[[%s]]%n", detailsSectionId);
-			writer.println("=== Parameter details");
+			writer.println("== Parameter details");
 			writeParameterDetails(writer, parameters, detailsSectionId);
 		}
 	}
@@ -155,7 +152,7 @@ public class DocumentPluginGoals extends DefaultTask {
 			writer.println();
 			writer.println();
 			writer.printf("[[%s-%s]]%n", sectionId, name);
-			writer.printf("==== `%s`%n", name);
+			writer.printf("=== `%s`%n", name);
 			writer.println(parameter.getDescription());
 			writer.println();
 			writer.println("[cols=\"10h,90\"]");

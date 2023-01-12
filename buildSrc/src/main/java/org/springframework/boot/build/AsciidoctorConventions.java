@@ -1,5 +1,5 @@
 /*
- * Copyright 2019-2021 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@
 package org.springframework.boot.build;
 
 import java.io.File;
-import java.net.URI;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -26,9 +25,9 @@ import org.asciidoctor.gradle.jvm.AbstractAsciidoctorTask;
 import org.asciidoctor.gradle.jvm.AsciidoctorJExtension;
 import org.asciidoctor.gradle.jvm.AsciidoctorJPlugin;
 import org.asciidoctor.gradle.jvm.AsciidoctorTask;
+import org.gradle.api.JavaVersion;
 import org.gradle.api.Project;
-import org.gradle.api.artifacts.Configuration;
-import org.gradle.api.artifacts.ConfigurationContainer;
+import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.Sync;
 
 import org.springframework.boot.build.artifactory.ArtifactoryRepository;
@@ -41,7 +40,7 @@ import org.springframework.util.StringUtils;
  * <ul>
  * <li>All warnings are made fatal.
  * <li>The version of AsciidoctorJ is upgraded to 2.4.3.
- * <li>A {@code asciidoctorExtensions} configuration is created.
+ * <li>An {@code asciidoctorExtensions} configuration is created.
  * <li>For each {@link AsciidoctorTask} (HTML only):
  * <ul>
  * <li>A task is created to sync the documentation resources to its output directory.
@@ -55,6 +54,7 @@ import org.springframework.util.StringUtils;
  * the current version, etc.
  * <li>{@link AbstractAsciidoctorTask#baseDirFollowsSourceDir() baseDirFollowsSourceDir()}
  * is enabled.
+ * <li>{@code asciidoctorExtensions} is added to the task's configurations.
  * </ul>
  * </ul>
  *
@@ -62,25 +62,17 @@ import org.springframework.util.StringUtils;
  */
 class AsciidoctorConventions {
 
-	private static final String EXTENSIONS_CONFIGURATION = "asciidoctorExtensions";
-
 	private static final String ASCIIDOCTORJ_VERSION = "2.4.3";
+
+	private static final String EXTENSIONS_CONFIGURATION_NAME = "asciidoctorExtensions";
 
 	void apply(Project project) {
 		project.getPlugins().withType(AsciidoctorJPlugin.class, (asciidoctorPlugin) -> {
-			configureDocResourcesRepository(project);
 			makeAllWarningsFatal(project);
 			upgradeAsciidoctorJVersion(project);
 			createAsciidoctorExtensionsConfiguration(project);
 			project.getTasks().withType(AbstractAsciidoctorTask.class,
 					(asciidoctorTask) -> configureAsciidoctorTask(project, asciidoctorTask));
-		});
-	}
-
-	private void configureDocResourcesRepository(Project project) {
-		project.getRepositories().maven((mavenRepo) -> {
-			mavenRepo.setUrl(URI.create("https://repo.spring.io/snapshot"));
-			mavenRepo.mavenContent((mavenContent) -> mavenContent.includeGroup("io.spring.asciidoctor.backends"));
 		});
 	}
 
@@ -93,24 +85,27 @@ class AsciidoctorConventions {
 	}
 
 	private void createAsciidoctorExtensionsConfiguration(Project project) {
-		ConfigurationContainer configurations = project.getConfigurations();
-		Configuration asciidoctorExtensions = configurations.maybeCreate(EXTENSIONS_CONFIGURATION);
-		asciidoctorExtensions.getDependencies().add(project.getDependencies()
-				.create("io.spring.asciidoctor.backends:spring-asciidoctor-backends:0.0.1-M1"));
-		Configuration dependencyManagement = configurations.findByName("dependencyManagement");
-		if (dependencyManagement != null) {
-			asciidoctorExtensions.extendsFrom(dependencyManagement);
-		}
+		project.getConfigurations().create(EXTENSIONS_CONFIGURATION_NAME, (configuration) -> {
+			project.getConfigurations().matching((candidate) -> "dependencyManagement".equals(candidate.getName()))
+					.all(configuration::extendsFrom);
+			configuration.getDependencies().add(project.getDependencies()
+					.create("io.spring.asciidoctor.backends:spring-asciidoctor-backends:0.0.4"));
+			configuration.getDependencies()
+					.add(project.getDependencies().create("org.asciidoctor:asciidoctorj-pdf:1.5.3"));
+		});
 	}
 
 	private void configureAsciidoctorTask(Project project, AbstractAsciidoctorTask asciidoctorTask) {
-		asciidoctorTask.configurations(EXTENSIONS_CONFIGURATION);
+		asciidoctorTask.configurations(EXTENSIONS_CONFIGURATION_NAME);
 		configureCommonAttributes(project, asciidoctorTask);
 		configureOptions(asciidoctorTask);
+		configureForkOptions(asciidoctorTask);
 		asciidoctorTask.baseDirFollowsSourceDir();
 		createSyncDocumentationSourceTask(project, asciidoctorTask);
-		if (asciidoctorTask instanceof AsciidoctorTask) {
-			configureAsciidoctorHtmlTask(project, (AsciidoctorTask) asciidoctorTask);
+		if (asciidoctorTask instanceof AsciidoctorTask task) {
+			boolean pdf = task.getName().toLowerCase().contains("pdf");
+			String backend = (!pdf) ? "spring-html" : "spring-pdf";
+			task.outputOptions((outputOptions) -> outputOptions.backends(backend));
 		}
 	}
 
@@ -123,9 +118,17 @@ class AsciidoctorConventions {
 		asciidoctorTask.attributes(attributes);
 	}
 
+	// See https://github.com/asciidoctor/asciidoctor-gradle-plugin/issues/597
+	private void configureForkOptions(AbstractAsciidoctorTask asciidoctorTask) {
+		if (JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_16)) {
+			asciidoctorTask.forkOptions((options) -> options.jvmArgs("--add-opens", "java.base/sun.nio.ch=ALL-UNNAMED",
+					"--add-opens", "java.base/java.io=ALL-UNNAMED"));
+		}
+	}
+
 	private String determineGitHubTag(Project project) {
 		String version = "v" + project.getVersion();
-		return (version.endsWith("-SNAPSHOT")) ? "master" : version;
+		return (version.endsWith("-SNAPSHOT")) ? "main" : version;
 	}
 
 	private void configureOptions(AbstractAsciidoctorTask asciidoctorTask) {
@@ -139,12 +142,10 @@ class AsciidoctorConventions {
 		syncDocumentationSource.setDestinationDir(syncedSource);
 		syncDocumentationSource.from("src/docs/");
 		asciidoctorTask.dependsOn(syncDocumentationSource);
+		asciidoctorTask.getInputs().dir(syncedSource).withPathSensitivity(PathSensitivity.RELATIVE)
+				.withPropertyName("synced source");
 		asciidoctorTask.setSourceDir(project.relativePath(new File(syncedSource, "asciidoc/")));
 		return syncDocumentationSource;
-	}
-
-	private void configureAsciidoctorHtmlTask(Project project, AsciidoctorTask asciidoctorTask) {
-		asciidoctorTask.outputOptions((outputOptions) -> outputOptions.backends("spring-html"));
 	}
 
 }

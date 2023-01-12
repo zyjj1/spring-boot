@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -61,7 +61,7 @@ class SpringConfigurationPropertySourceTests {
 	}
 
 	@Test
-	void getValueOrigin() {
+	void getValueOriginAndPropertySource() {
 		Map<String, Object> source = new LinkedHashMap<>();
 		source.put("key", "value");
 		PropertySource<?> propertySource = new MapPropertySource("test", source);
@@ -69,8 +69,9 @@ class SpringConfigurationPropertySourceTests {
 		ConfigurationPropertyName name = ConfigurationPropertyName.of("my.key");
 		mapper.addFromConfigurationProperty(name, "key");
 		SpringConfigurationPropertySource adapter = new SpringConfigurationPropertySource(propertySource, mapper);
-		assertThat(adapter.getConfigurationProperty(name).getOrigin().toString())
-				.isEqualTo("\"key\" from property source \"test\"");
+		ConfigurationProperty configurationProperty = adapter.getConfigurationProperty(name);
+		assertThat(configurationProperty.getOrigin()).hasToString("\"key\" from property source \"test\"");
+		assertThat(configurationProperty.getSource()).isEqualTo(adapter);
 	}
 
 	@Test
@@ -82,7 +83,7 @@ class SpringConfigurationPropertySourceTests {
 		ConfigurationPropertyName name = ConfigurationPropertyName.of("my.key");
 		mapper.addFromConfigurationProperty(name, "key");
 		SpringConfigurationPropertySource adapter = new SpringConfigurationPropertySource(propertySource, mapper);
-		assertThat(adapter.getConfigurationProperty(name).getOrigin().toString()).isEqualTo("TestOrigin key");
+		assertThat(adapter.getConfigurationProperty(name).getOrigin()).hasToString("TestOrigin key");
 	}
 
 	@Test

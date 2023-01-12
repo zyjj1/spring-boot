@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ import org.springframework.boot.autoconfigure.context.PropertyPlaceholderAutoCon
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
-import org.springframework.boot.web.server.LocalServerPort;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -45,7 +45,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(classes = SampleUndertowWebSocketsApplication.class, webEnvironment = WebEnvironment.RANDOM_PORT)
 class SampleWebSocketsApplicationTests {
 
-	private static Log logger = LogFactory.getLog(SampleWebSocketsApplicationTests.class);
+	private static final Log logger = LogFactory.getLog(SampleWebSocketsApplicationTests.class);
 
 	@LocalServerPort
 	private int port = 1234;
@@ -59,7 +59,7 @@ class SampleWebSocketsApplicationTests {
 		long count = context.getBean(ClientConfiguration.class).latch.getCount();
 		AtomicReference<String> messagePayloadReference = context.getBean(ClientConfiguration.class).messagePayload;
 		context.close();
-		assertThat(count).isEqualTo(0);
+		assertThat(count).isZero();
 		assertThat(messagePayloadReference.get()).isEqualTo("Did you say \"Hello world!\"?");
 	}
 
@@ -72,7 +72,7 @@ class SampleWebSocketsApplicationTests {
 		long count = context.getBean(ClientConfiguration.class).latch.getCount();
 		AtomicReference<String> messagePayloadReference = context.getBean(ClientConfiguration.class).messagePayload;
 		context.close();
-		assertThat(count).isEqualTo(0);
+		assertThat(count).isZero();
 		assertThat(messagePayloadReference.get()).isEqualTo("Reversed: !dlrow olleH");
 	}
 

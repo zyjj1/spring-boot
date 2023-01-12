@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,13 @@
 
 package org.springframework.boot.jdbc.init;
 
-import java.nio.charset.Charset;
-import java.util.List;
-
 import javax.sql.DataSource;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
 import org.springframework.beans.factory.InitializingBean;
+import org.springframework.boot.jdbc.EmbeddedDatabaseConnection;
 import org.springframework.boot.sql.init.AbstractScriptDatabaseInitializer;
 import org.springframework.boot.sql.init.DatabaseInitializationSettings;
 import org.springframework.core.io.Resource;
@@ -37,13 +38,15 @@ import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
  */
 public class DataSourceScriptDatabaseInitializer extends AbstractScriptDatabaseInitializer {
 
+	private static final Log logger = LogFactory.getLog(DataSourceScriptDatabaseInitializer.class);
+
 	private final DataSource dataSource;
 
 	/**
 	 * Creates a new {@link DataSourceScriptDatabaseInitializer} that will initialize the
 	 * given {@code DataSource} using the given settings.
 	 * @param dataSource data source to initialize
-	 * @param settings initialization settings
+	 * @param settings the initialization settings
 	 */
 	public DataSourceScriptDatabaseInitializer(DataSource dataSource, DatabaseInitializationSettings settings) {
 		super(settings);
@@ -59,17 +62,38 @@ public class DataSourceScriptDatabaseInitializer extends AbstractScriptDatabaseI
 	}
 
 	@Override
-	protected void runScripts(List<Resource> resources, boolean continueOnError, String separator, Charset encoding) {
-		ResourceDatabasePopulator populator = new ResourceDatabasePopulator();
-		populator.setContinueOnError(continueOnError);
-		populator.setSeparator(separator);
-		if (encoding != null) {
-			populator.setSqlScriptEncoding(encoding.name());
+	protected boolean isEmbeddedDatabase() {
+		try {
+			return EmbeddedDatabaseConnection.isEmbedded(this.dataSource);
 		}
-		for (Resource resource : resources) {
+		catch (Exception ex) {
+			logger.debug("Could not determine if datasource is embedded", ex);
+			return false;
+		}
+	}
+
+	@Override
+	protected void runScripts(Scripts scripts) {
+		ResourceDatabasePopulator populator = new ResourceDatabasePopulator();
+		populator.setContinueOnError(scripts.isContinueOnError());
+		populator.setSeparator(scripts.getSeparator());
+		if (scripts.getEncoding() != null) {
+			populator.setSqlScriptEncoding(scripts.getEncoding().name());
+		}
+		for (Resource resource : scripts) {
 			populator.addScript(resource);
 		}
+		customize(populator);
 		DatabasePopulatorUtils.execute(populator, this.dataSource);
+	}
+
+	/**
+	 * Customize the {@link ResourceDatabasePopulator}.
+	 * @param populator the configured database populator
+	 * @since 2.6.2
+	 */
+	protected void customize(ResourceDatabasePopulator populator) {
+
 	}
 
 }

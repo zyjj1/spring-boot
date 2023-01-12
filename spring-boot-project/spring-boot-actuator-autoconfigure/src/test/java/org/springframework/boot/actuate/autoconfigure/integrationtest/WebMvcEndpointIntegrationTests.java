@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2021 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,7 @@ package org.springframework.boot.actuate.autoconfigure.integrationtest;
 
 import java.util.function.Supplier;
 
-import javax.servlet.http.HttpServlet;
-
+import jakarta.servlet.http.HttpServlet;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -33,6 +32,7 @@ import org.springframework.boot.actuate.endpoint.web.EndpointServlet;
 import org.springframework.boot.actuate.endpoint.web.annotation.ControllerEndpoint;
 import org.springframework.boot.actuate.endpoint.web.annotation.RestControllerEndpoint;
 import org.springframework.boot.actuate.endpoint.web.annotation.ServletEndpoint;
+import org.springframework.boot.actuate.endpoint.web.servlet.WebMvcEndpointHandlerMapping;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
 import org.springframework.boot.autoconfigure.context.PropertyPlaceholderAutoConfiguration;
 import org.springframework.boot.autoconfigure.data.rest.RepositoryRestMvcAutoConfiguration;
@@ -52,10 +52,13 @@ import org.springframework.mock.web.MockServletContext;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.test.context.TestSecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.DefaultMockMvcBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.test.web.servlet.setup.MockMvcConfigurer;
+import org.springframework.web.util.pattern.PathPatternParser;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.both;
 import static org.hamcrest.Matchers.hasKey;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
@@ -76,6 +79,16 @@ class WebMvcEndpointIntegrationTests {
 	void close() {
 		TestSecurityContextHolder.clearContext();
 		this.context.close();
+	}
+
+	@Test
+	void webMvcEndpointHandlerMappingIsConfiguredWithPathPatternParser() {
+		this.context = new AnnotationConfigServletWebApplicationContext();
+		this.context.register(DefaultConfiguration.class);
+		this.context.setServletContext(new MockServletContext());
+		this.context.refresh();
+		WebMvcEndpointHandlerMapping handlerMapping = this.context.getBean(WebMvcEndpointHandlerMapping.class);
+		assertThat(handlerMapping.getPatternParser()).isInstanceOf(PathPatternParser.class);
 	}
 
 	@Test
@@ -126,6 +139,16 @@ class WebMvcEndpointIntegrationTests {
 		TestPropertyValues.of("management.endpoints.web.discovery.enabled=false").applyTo(this.context);
 		MockMvc mockMvc = doCreateMockMvc();
 		mockMvc.perform(get("/actuator").accept("*/*")).andExpect(status().isNotFound());
+	}
+
+	@Test
+	void endpointObjectMapperCanBeApplied() throws Exception {
+		this.context = new AnnotationConfigServletWebApplicationContext();
+		this.context.register(EndpointObjectMapperConfiguration.class, DefaultConfiguration.class);
+		TestPropertyValues.of("management.endpoints.web.exposure.include=*").applyTo(this.context);
+		MockMvc mockMvc = doCreateMockMvc();
+		MvcResult result = mockMvc.perform(get("/actuator/beans")).andExpect(status().isOk()).andReturn();
+		assertThat(result.getResponse().getContentAsString()).contains("\"scope\":\"notelgnis\"");
 	}
 
 	private MockMvc createSecureMockMvc() {

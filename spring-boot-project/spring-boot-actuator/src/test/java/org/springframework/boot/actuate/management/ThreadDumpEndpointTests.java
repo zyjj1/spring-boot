@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ class ThreadDumpEndpointTests {
 
 	@Test
 	void dumpThreads() {
-		assertThat(new ThreadDumpEndpoint().threadDump().getThreads().size()).isGreaterThan(0);
+		assertThat(new ThreadDumpEndpoint().threadDump().getThreads()).isNotEmpty();
 	}
 
 	@Test
@@ -105,7 +105,11 @@ class ThreadDumpEndpointTests {
 				.contains(String.format("\t- waiting to lock <%s> (a java.lang.Object) owned by \"%s\" t@%d",
 						hexIdentityHashCode(contendedMonitor), Thread.currentThread().getName(),
 						Thread.currentThread().getId()))
-				.contains(String.format("\t- waiting on <%s> (a java.lang.Object)", hexIdentityHashCode(monitor)))
+				.satisfiesAnyOf(
+						(dump) -> assertThat(dump).contains(String.format("\t- waiting on <%s> (a java.lang.Object)",
+								hexIdentityHashCode(monitor))),
+						(dump) -> assertThat(dump).contains(String.format(
+								"\t- parking to wait for <%s> (a java.lang.Object)", hexIdentityHashCode(monitor))))
 				.containsPattern(
 						String.format("Locked ownable synchronizers:%n\t- Locked <[0-9a-z]+> \\(a %s\\$NonfairSync\\)",
 								ReentrantReadWriteLock.class.getName().replace(".", "\\.")));
