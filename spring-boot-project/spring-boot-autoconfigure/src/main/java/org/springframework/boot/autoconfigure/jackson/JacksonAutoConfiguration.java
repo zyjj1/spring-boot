@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -213,6 +213,8 @@ public class JacksonAutoConfiguration {
 				configureFeatures(builder, this.jacksonProperties.getMapper());
 				configureFeatures(builder, this.jacksonProperties.getParser());
 				configureFeatures(builder, this.jacksonProperties.getGenerator());
+				configureFeatures(builder, this.jacksonProperties.getDatatype().getEnum());
+				configureFeatures(builder, this.jacksonProperties.getDatatype().getJsonNode());
 				configureDateFormat(builder);
 				configurePropertyNamingStrategy(builder);
 				configureModules(builder);
@@ -361,8 +363,9 @@ public class JacksonAutoConfiguration {
 		}
 
 		private void registerPropertyNamingStrategyHints(ReflectionHints hints, Class<?> type) {
-			Stream.of(type.getDeclaredFields()).filter(this::isPropertyNamingStrategyField)
-					.forEach(hints::registerField);
+			Stream.of(type.getDeclaredFields())
+				.filter(this::isPropertyNamingStrategyField)
+				.forEach(hints::registerField);
 		}
 
 		private boolean isPropertyNamingStrategyField(Field candidate) {

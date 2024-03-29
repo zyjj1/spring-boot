@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,6 +33,7 @@ import org.junit.jupiter.params.provider.EnumSource.Mode;
 import org.springframework.boot.jdbc.DatabaseDriver;
 import org.springframework.boot.sql.init.DatabaseInitializationSettings;
 import org.springframework.core.io.DefaultResourceLoader;
+import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -56,7 +57,7 @@ class BatchDataSourceScriptDatabaseInitializerTests {
 		DatabaseInitializationSettings settings = BatchDataSourceScriptDatabaseInitializer.getSettings(dataSource,
 				properties.getJdbc());
 		assertThat(settings.getSchemaLocations())
-				.containsOnly("classpath:org/springframework/batch/core/schema-test.sql");
+			.containsOnly("classpath:org/springframework/batch/core/schema-test.sql");
 		then(dataSource).shouldHaveNoInteractions();
 	}
 
@@ -76,17 +77,18 @@ class BatchDataSourceScriptDatabaseInitializerTests {
 		DatabaseInitializationSettings settings = BatchDataSourceScriptDatabaseInitializer.getSettings(dataSource,
 				properties.getJdbc());
 		List<String> schemaLocations = settings.getSchemaLocations();
-		assertThat(schemaLocations)
-				.allSatisfy((location) -> assertThat(resourceLoader.getResource(location).exists()).isTrue());
+		assertThat(schemaLocations).isNotEmpty()
+			.allSatisfy((location) -> assertThat(resourceLoader.getResource(location).exists()).isTrue());
 	}
 
 	@Test
 	void batchHasExpectedBuiltInSchemas() throws IOException {
 		PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
 		List<String> schemaNames = Stream
-				.of(resolver.getResources("classpath:org/springframework/batch/core/schema-*.sql"))
-				.map((resource) -> resource.getFilename()).filter((resourceName) -> !resourceName.contains("-drop-"))
-				.toList();
+			.of(resolver.getResources("classpath:org/springframework/batch/core/schema-*.sql"))
+			.map(Resource::getFilename)
+			.filter((resourceName) -> !resourceName.contains("-drop-"))
+			.toList();
 		assertThat(schemaNames).containsExactlyInAnyOrder("schema-derby.sql", "schema-sqlserver.sql",
 				"schema-mariadb.sql", "schema-mysql.sql", "schema-sqlite.sql", "schema-postgresql.sql",
 				"schema-hana.sql", "schema-oracle.sql", "schema-db2.sql", "schema-hsqldb.sql", "schema-sybase.sql",

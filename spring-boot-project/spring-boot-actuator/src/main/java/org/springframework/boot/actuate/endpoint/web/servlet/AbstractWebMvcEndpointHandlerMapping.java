@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -196,18 +196,28 @@ public abstract class AbstractWebMvcEndpointHandlerMapping extends RequestMappin
 	}
 
 	private RequestMappingInfo createRequestMappingInfo(WebOperationRequestPredicate predicate, String path) {
-		return RequestMappingInfo.paths(this.endpointMapping.createSubPath(path)).options(this.builderConfig)
-				.methods(RequestMethod.valueOf(predicate.getHttpMethod().name()))
-				.consumes(predicate.getConsumes().toArray(new String[0]))
-				.produces(predicate.getProduces().toArray(new String[0])).build();
+		String subPath = this.endpointMapping.createSubPath(path);
+		List<String> paths = new ArrayList<>();
+		paths.add(subPath);
+		if (!StringUtils.hasLength(subPath)) {
+			paths.add("/");
+		}
+		return RequestMappingInfo.paths(paths.toArray(new String[0]))
+			.options(this.builderConfig)
+			.methods(RequestMethod.valueOf(predicate.getHttpMethod().name()))
+			.consumes(predicate.getConsumes().toArray(new String[0]))
+			.produces(predicate.getProduces().toArray(new String[0]))
+			.build();
 	}
 
 	private void registerLinksMapping() {
 		String path = this.endpointMapping.getPath();
 		String linksPath = (StringUtils.hasLength(path)) ? this.endpointMapping.createSubPath("/") : "/";
-		RequestMappingInfo mapping = RequestMappingInfo.paths(linksPath).methods(RequestMethod.GET)
-				.produces(this.endpointMediaTypes.getProduced().toArray(new String[0])).options(this.builderConfig)
-				.build();
+		RequestMappingInfo mapping = RequestMappingInfo.paths(linksPath)
+			.methods(RequestMethod.GET)
+			.produces(this.endpointMediaTypes.getProduced().toArray(new String[0]))
+			.options(this.builderConfig)
+			.build();
 		LinksHandler linksHandler = getLinksHandler();
 		registerMapping(mapping, linksHandler, ReflectionUtils.findMethod(linksHandler.getClass(), "links",
 				HttpServletRequest.class, HttpServletResponse.class));
@@ -306,12 +316,12 @@ public abstract class AbstractWebMvcEndpointHandlerMapping extends RequestMappin
 				ProducibleOperationArgumentResolver producibleOperationArgumentResolver = new ProducibleOperationArgumentResolver(
 						() -> headers.get("Accept"));
 				OperationArgumentResolver serverNamespaceArgumentResolver = OperationArgumentResolver
-						.of(WebServerNamespace.class, () -> {
-							WebApplicationContext applicationContext = WebApplicationContextUtils
-									.getRequiredWebApplicationContext(request.getServletContext());
-							return WebServerNamespace
-									.from(WebServerApplicationContext.getServerNamespace(applicationContext));
-						});
+					.of(WebServerNamespace.class, () -> {
+						WebApplicationContext applicationContext = WebApplicationContextUtils
+							.getRequiredWebApplicationContext(request.getServletContext());
+						return WebServerNamespace
+							.from(WebServerApplicationContext.getServerNamespace(applicationContext));
+					});
 				InvocationContext invocationContext = new InvocationContext(securityContext, arguments,
 						serverNamespaceArgumentResolver, producibleOperationArgumentResolver);
 				return handleResult(this.operation.invoke(invocationContext), HttpMethod.valueOf(request.getMethod()));
@@ -329,15 +339,16 @@ public abstract class AbstractWebMvcEndpointHandlerMapping extends RequestMappin
 		private Map<String, Object> getArguments(HttpServletRequest request, Map<String, String> body) {
 			Map<String, Object> arguments = new LinkedHashMap<>(getTemplateVariables(request));
 			String matchAllRemainingPathSegmentsVariable = this.operation.getRequestPredicate()
-					.getMatchAllRemainingPathSegmentsVariable();
+				.getMatchAllRemainingPathSegmentsVariable();
 			if (matchAllRemainingPathSegmentsVariable != null) {
 				arguments.put(matchAllRemainingPathSegmentsVariable, getRemainingPathSegments(request));
 			}
 			if (body != null && HttpMethod.POST.name().equals(request.getMethod())) {
 				arguments.putAll(body);
 			}
-			request.getParameterMap().forEach(
-					(name, values) -> arguments.put(name, (values.length != 1) ? Arrays.asList(values) : values[0]));
+			request.getParameterMap()
+				.forEach((name, values) -> arguments.put(name,
+						(values.length != 1) ? Arrays.asList(values) : values[0]));
 			return arguments;
 		}
 
@@ -375,14 +386,14 @@ public abstract class AbstractWebMvcEndpointHandlerMapping extends RequestMappin
 				return new ResponseEntity<>(
 						(httpMethod != HttpMethod.GET) ? HttpStatus.NO_CONTENT : HttpStatus.NOT_FOUND);
 			}
-			if (!(result instanceof WebEndpointResponse)) {
+			if (!(result instanceof WebEndpointResponse<?> response)) {
 				return convertIfNecessary(result);
 			}
-			WebEndpointResponse<?> response = (WebEndpointResponse<?>) result;
 			MediaType contentType = (response.getContentType() != null) ? new MediaType(response.getContentType())
 					: null;
-			return ResponseEntity.status(response.getStatus()).contentType(contentType)
-					.body(convertIfNecessary(response.getBody()));
+			return ResponseEntity.status(response.getStatus())
+				.contentType(contentType)
+				.body(convertIfNecessary(response.getBody()));
 		}
 
 		private Object convertIfNecessary(Object body) {
@@ -392,7 +403,7 @@ public abstract class AbstractWebMvcEndpointHandlerMapping extends RequestMappin
 			return body;
 		}
 
-		private static class FluxBodyConverter implements Function<Object, Object> {
+		private static final class FluxBodyConverter implements Function<Object, Object> {
 
 			@Override
 			public Object apply(Object body) {

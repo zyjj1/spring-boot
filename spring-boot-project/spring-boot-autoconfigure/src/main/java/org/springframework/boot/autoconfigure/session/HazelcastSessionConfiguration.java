@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,8 @@ import org.springframework.boot.context.properties.PropertyMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.session.SessionRepository;
 import org.springframework.session.config.SessionRepositoryCustomizer;
 import org.springframework.session.hazelcast.HazelcastIndexedSessionRepository;
@@ -49,13 +51,14 @@ import org.springframework.session.hazelcast.config.annotation.web.http.Hazelcas
 class HazelcastSessionConfiguration {
 
 	@Bean
+	@Order(Ordered.HIGHEST_PRECEDENCE)
 	SessionRepositoryCustomizer<HazelcastIndexedSessionRepository> springBootSessionRepositoryCustomizer(
 			SessionProperties sessionProperties, HazelcastSessionProperties hazelcastSessionProperties,
 			ServerProperties serverProperties) {
 		return (sessionRepository) -> {
 			PropertyMapper map = PropertyMapper.get().alwaysApplyingWhenNonNull();
 			map.from(sessionProperties.determineTimeout(() -> serverProperties.getServlet().getSession().getTimeout()))
-					.to(sessionRepository::setDefaultMaxInactiveInterval);
+				.to(sessionRepository::setDefaultMaxInactiveInterval);
 			map.from(hazelcastSessionProperties::getMapName).to(sessionRepository::setSessionMapName);
 			map.from(hazelcastSessionProperties::getFlushMode).to(sessionRepository::setFlushMode);
 			map.from(hazelcastSessionProperties::getSaveMode).to(sessionRepository::setSaveMode);

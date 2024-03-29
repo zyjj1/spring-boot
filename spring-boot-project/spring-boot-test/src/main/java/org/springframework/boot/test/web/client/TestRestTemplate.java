@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import java.net.URI;
 import java.security.KeyManagementException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -40,11 +41,11 @@ import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuil
 import org.apache.hc.client5.http.protocol.HttpClientContext;
 import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactory;
 import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactoryBuilder;
-import org.apache.hc.client5.http.ssl.TrustSelfSignedStrategy;
 import org.apache.hc.core5.http.io.SocketConfig;
 import org.apache.hc.core5.http.protocol.HttpContext;
 import org.apache.hc.core5.http.ssl.TLS;
 import org.apache.hc.core5.ssl.SSLContextBuilder;
+import org.apache.hc.core5.ssl.TrustStrategy;
 
 import org.springframework.boot.web.client.ClientHttpRequestFactorySettings;
 import org.springframework.boot.web.client.RestTemplateBuilder;
@@ -70,8 +71,9 @@ import org.springframework.web.util.UriTemplateHandler;
 /**
  * Convenient alternative of {@link RestTemplate} that is suitable for integration tests.
  * {@code TestRestTemplate} is fault-tolerant. This means that 4xx and 5xx do not result
- * in an exception being thrown and can instead be detected via the {@link ResponseEntity
- * response entity} and its {@link ResponseEntity#getStatusCode() status code}.
+ * in an exception being thrown and can instead be detected through the
+ * {@link ResponseEntity response entity} and its {@link ResponseEntity#getStatusCode()
+ * status code}.
  * <p>
  * A {@code TestRestTemplate} can optionally carry Basic authentication headers. If Apache
  * Http Client 4.3.2 or better is available (recommended) it will be used as the client,
@@ -170,8 +172,8 @@ public class TestRestTemplate {
 	}
 
 	/**
-	 * Returns the root URI applied by a {@link RootUriTemplateHandler} or {@code ""} if
-	 * the root URI is not available.
+	 * Returns the root URI applied by {@link RestTemplateBuilder#rootUri(String)} or
+	 * {@code ""} if the root URI has not been applied.
 	 * @return the root URI
 	 */
 	public String getRootUri() {
@@ -955,21 +957,20 @@ public class TestRestTemplate {
 	private URI applyRootUriIfNecessary(URI uri) {
 		UriTemplateHandler uriTemplateHandler = this.restTemplate.getUriTemplateHandler();
 		if ((uriTemplateHandler instanceof RootUriTemplateHandler rootHandler) && uri.toString().startsWith("/")) {
-			return URI.create(rootHandler.getRootUri() + uri.toString());
+			return URI.create(rootHandler.getRootUri() + uri);
 		}
 		return uri;
 	}
 
 	private URI resolveUri(RequestEntity<?> entity) {
-		if (entity instanceof UriTemplateRequestEntity) {
-			UriTemplateRequestEntity<?> templatedUriEntity = (UriTemplateRequestEntity<?>) entity;
+		if (entity instanceof UriTemplateRequestEntity<?> templatedUriEntity) {
 			if (templatedUriEntity.getVars() != null) {
-				return this.restTemplate.getUriTemplateHandler().expand(templatedUriEntity.getUriTemplate(),
-						templatedUriEntity.getVars());
+				return this.restTemplate.getUriTemplateHandler()
+					.expand(templatedUriEntity.getUriTemplate(), templatedUriEntity.getVars());
 			}
 			else if (templatedUriEntity.getVarsMap() != null) {
-				return this.restTemplate.getUriTemplateHandler().expand(templatedUriEntity.getUriTemplate(),
-						templatedUriEntity.getVarsMap());
+				return this.restTemplate.getUriTemplateHandler()
+					.expand(templatedUriEntity.getUriTemplate(), templatedUriEntity.getVarsMap());
 			}
 			throw new IllegalStateException(
 					"No variables specified for URI template: " + templatedUriEntity.getUriTemplate());
@@ -993,7 +994,7 @@ public class TestRestTemplate {
 		ENABLE_REDIRECTS,
 
 		/**
-		 * Use a {@link SSLConnectionSocketFactory} with {@link TrustSelfSignedStrategy}.
+		 * Use a {@link SSLConnectionSocketFactory} that trusts self-signed certificates.
 		 */
 		SSL
 
@@ -1021,9 +1022,6 @@ public class TestRestTemplate {
 			if (settings.connectTimeout() != null) {
 				setConnectTimeout((int) settings.connectTimeout().toMillis());
 			}
-			if (settings.bufferRequestBody() != null) {
-				setBufferRequestBody(settings.bufferRequestBody());
-			}
 		}
 
 		private HttpClient createHttpClient(Duration readTimeout, boolean ssl) {
@@ -1046,7 +1044,8 @@ public class TestRestTemplate {
 			}
 			if (readTimeout != null) {
 				SocketConfig socketConfig = SocketConfig.custom()
-						.setSoTimeout((int) readTimeout.toMillis(), TimeUnit.MILLISECONDS).build();
+					.setSoTimeout((int) readTimeout.toMillis(), TimeUnit.MILLISECONDS)
+					.build();
 				builder.setDefaultSocketConfig(socketConfig);
 			}
 			return builder.build();
@@ -1055,9 +1054,11 @@ public class TestRestTemplate {
 		private SSLConnectionSocketFactory createSocketFactory()
 				throws NoSuchAlgorithmException, KeyManagementException, KeyStoreException {
 			SSLContext sslContext = new SSLContextBuilder().loadTrustMaterial(null, new TrustSelfSignedStrategy())
-					.build();
-			return SSLConnectionSocketFactoryBuilder.create().setSslContext(sslContext)
-					.setTlsVersions(TLS.V_1_3, TLS.V_1_2).build();
+				.build();
+			return SSLConnectionSocketFactoryBuilder.create()
+				.setSslContext(sslContext)
+				.setTlsVersions(TLS.V_1_3, TLS.V_1_2)
+				.build();
 		}
 
 		@Override
@@ -1077,10 +1078,19 @@ public class TestRestTemplate {
 
 	}
 
-	private static class NoOpResponseErrorHandler extends DefaultResponseErrorHandler {
+	private static final class NoOpResponseErrorHandler extends DefaultResponseErrorHandler {
 
 		@Override
 		public void handleError(ClientHttpResponse response) throws IOException {
+		}
+
+	}
+
+	private static final class TrustSelfSignedStrategy implements TrustStrategy {
+
+		@Override
+		public boolean isTrusted(X509Certificate[] chain, String authType) {
+			return chain.length == 1;
 		}
 
 	}

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -107,7 +107,7 @@ public class WebFluxEndpointManagementContextConfiguration {
 	private boolean shouldRegisterLinksMapping(WebEndpointProperties properties, Environment environment,
 			String basePath) {
 		return properties.getDiscovery().isEnabled() && (StringUtils.hasText(basePath)
-				|| ManagementPortType.get(environment).equals(ManagementPortType.DIFFERENT));
+				|| ManagementPortType.get(environment) == ManagementPortType.DIFFERENT);
 	}
 
 	@Bean
@@ -118,7 +118,10 @@ public class WebFluxEndpointManagementContextConfiguration {
 			WebEndpointsSupplier webEndpointsSupplier, HealthEndpointGroups groups) {
 		Collection<ExposableWebEndpoint> webEndpoints = webEndpointsSupplier.getEndpoints();
 		ExposableWebEndpoint health = webEndpoints.stream()
-				.filter((endpoint) -> endpoint.getEndpointId().equals(HealthEndpoint.ID)).findFirst().get();
+			.filter((endpoint) -> endpoint.getEndpointId().equals(HealthEndpoint.ID))
+			.findFirst()
+			.orElseThrow(
+					() -> new IllegalStateException("No endpoint with id '%s' found".formatted(HealthEndpoint.ID)));
 		return new AdditionalHealthEndpointPathsWebFluxHandlerMapping(new EndpointMapping(""), health,
 				groups.getAllWithAdditionalPath(WebServerNamespace.MANAGEMENT));
 	}
@@ -149,7 +152,7 @@ public class WebFluxEndpointManagementContextConfiguration {
 	static class ServerCodecConfigurerEndpointObjectMapperBeanPostProcessor implements BeanPostProcessor {
 
 		private static final List<MediaType> MEDIA_TYPES = Collections
-				.unmodifiableList(Arrays.asList(MediaType.APPLICATION_JSON, new MediaType("application", "*+json")));
+			.unmodifiableList(Arrays.asList(MediaType.APPLICATION_JSON, new MediaType("application", "*+json")));
 
 		private final Supplier<EndpointObjectMapper> endpointObjectMapper;
 
@@ -160,23 +163,22 @@ public class WebFluxEndpointManagementContextConfiguration {
 
 		@Override
 		public Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
-			if (bean instanceof ServerCodecConfigurer) {
-				process((ServerCodecConfigurer) bean);
+			if (bean instanceof ServerCodecConfigurer serverCodecConfigurer) {
+				process(serverCodecConfigurer);
 			}
 			return bean;
 		}
 
 		private void process(ServerCodecConfigurer configurer) {
 			for (HttpMessageWriter<?> writer : configurer.getWriters()) {
-				if (writer instanceof EncoderHttpMessageWriter) {
-					process(((EncoderHttpMessageWriter<?>) writer).getEncoder());
+				if (writer instanceof EncoderHttpMessageWriter<?> encoderHttpMessageWriter) {
+					process((encoderHttpMessageWriter).getEncoder());
 				}
 			}
 		}
 
 		private void process(Encoder<?> encoder) {
-			if (encoder instanceof Jackson2JsonEncoder) {
-				Jackson2JsonEncoder jackson2JsonEncoder = (Jackson2JsonEncoder) encoder;
+			if (encoder instanceof Jackson2JsonEncoder jackson2JsonEncoder) {
 				jackson2JsonEncoder.registerObjectMappersForType(OperationResponseBody.class, (associations) -> {
 					ObjectMapper objectMapper = this.endpointObjectMapper.get().get();
 					MEDIA_TYPES.forEach((mimeType) -> associations.put(mimeType, objectMapper));

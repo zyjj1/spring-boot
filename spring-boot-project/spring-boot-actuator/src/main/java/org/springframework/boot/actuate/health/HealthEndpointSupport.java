@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -127,7 +127,7 @@ abstract class HealthEndpointSupport<C, T> {
 	private String getName(String[] path, int pathOffset) {
 		StringBuilder name = new StringBuilder();
 		while (pathOffset < path.length) {
-			name.append((name.length() != 0) ? "/" : "");
+			name.append((!name.isEmpty()) ? "/" : "");
 			name.append(path[pathOffset]);
 			pathOffset++;
 		}
@@ -193,7 +193,7 @@ abstract class HealthEndpointSupport<C, T> {
 	protected final CompositeHealth getCompositeHealth(ApiVersion apiVersion, Map<String, HealthComponent> components,
 			StatusAggregator statusAggregator, boolean showComponents, Set<String> groupNames) {
 		Status status = statusAggregator
-				.getAggregateStatus(components.values().stream().map(this::getStatus).collect(Collectors.toSet()));
+			.getAggregateStatus(components.values().stream().map(this::getStatus).collect(Collectors.toSet()));
 		Map<String, HealthComponent> instances = showComponents ? components : null;
 		if (groupNames != null) {
 			return new SystemHealth(apiVersion, status, instances, groupNames);

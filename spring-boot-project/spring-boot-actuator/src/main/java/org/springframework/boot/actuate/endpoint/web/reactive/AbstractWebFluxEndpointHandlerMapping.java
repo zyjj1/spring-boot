@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,8 +19,10 @@ package org.springframework.boot.actuate.endpoint.web.reactive;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.security.Principal;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
@@ -81,6 +83,7 @@ import org.springframework.web.util.pattern.PathPattern;
  * @author Madhura Bhave
  * @author Phillip Webb
  * @author Brian Clozel
+ * @author Scott Frederick
  * @since 2.0.0
  */
 @ImportRuntimeHints(AbstractWebFluxEndpointHandlerMappingRuntimeHints.class)
@@ -176,18 +179,29 @@ public abstract class AbstractWebFluxEndpointHandlerMapping extends RequestMappi
 	private RequestMappingInfo createRequestMappingInfo(WebOperation operation) {
 		WebOperationRequestPredicate predicate = operation.getRequestPredicate();
 		String path = this.endpointMapping.createSubPath(predicate.getPath());
+		List<String> paths = new ArrayList<>();
+		paths.add(path);
+		if (!StringUtils.hasText(path)) {
+			paths.add("/");
+		}
 		RequestMethod method = RequestMethod.valueOf(predicate.getHttpMethod().name());
 		String[] consumes = StringUtils.toStringArray(predicate.getConsumes());
 		String[] produces = StringUtils.toStringArray(predicate.getProduces());
-		return RequestMappingInfo.paths(path).methods(method).consumes(consumes).produces(produces).build();
+		return RequestMappingInfo.paths(paths.toArray(new String[0]))
+			.methods(method)
+			.consumes(consumes)
+			.produces(produces)
+			.build();
 	}
 
 	private void registerLinksMapping() {
 		String path = this.endpointMapping.getPath();
 		String linksPath = StringUtils.hasLength(path) ? path : "/";
 		String[] produces = StringUtils.toStringArray(this.endpointMediaTypes.getProduced());
-		RequestMappingInfo mapping = RequestMappingInfo.paths(linksPath).methods(RequestMethod.GET).produces(produces)
-				.build();
+		RequestMappingInfo mapping = RequestMappingInfo.paths(linksPath)
+			.methods(RequestMethod.GET)
+			.produces(produces)
+			.build();
 		LinksHandler linksHandler = getLinksHandler();
 		registerMapping(mapping, linksHandler,
 				ReflectionUtils.findMethod(linksHandler.getClass(), "links", ServerWebExchange.class));
@@ -247,6 +261,26 @@ public abstract class AbstractWebFluxEndpointHandlerMapping extends RequestMappi
 
 	}
 
+	protected static final class ExceptionCapturingInvoker implements OperationInvoker {
+
+		private final OperationInvoker invoker;
+
+		public ExceptionCapturingInvoker(OperationInvoker invoker) {
+			this.invoker = invoker;
+		}
+
+		@Override
+		public Object invoke(InvocationContext context) {
+			try {
+				return this.invoker.invoke(context);
+			}
+			catch (Exception ex) {
+				return Mono.error(ex);
+			}
+		}
+
+	}
+
 	/**
 	 * Reactive handler providing actuator links at the root endpoint.
 	 */
@@ -290,9 +324,9 @@ public abstract class AbstractWebFluxEndpointHandlerMapping extends RequestMappi
 		private OperationInvoker getInvoker(WebOperation operation) {
 			OperationInvoker invoker = operation::invoke;
 			if (operation.isBlocking()) {
-				invoker = new ElasticSchedulerInvoker(invoker);
+				return new ElasticSchedulerInvoker(invoker);
 			}
-			return invoker;
+			return new ExceptionCapturingInvoker(invoker);
 		}
 
 		private Supplier<Mono<? extends SecurityContext>> getSecurityContextSupplier() {
@@ -305,8 +339,8 @@ public abstract class AbstractWebFluxEndpointHandlerMapping extends RequestMappi
 
 		Mono<? extends SecurityContext> springSecurityContext() {
 			return ReactiveSecurityContextHolder.getContext()
-					.map((securityContext) -> new ReactiveSecurityContext(securityContext.getAuthentication()))
-					.switchIfEmpty(Mono.just(new ReactiveSecurityContext(null)));
+				.map((securityContext) -> new ReactiveSecurityContext(securityContext.getAuthentication()))
+				.switchIfEmpty(Mono.just(new ReactiveSecurityContext(null)));
 		}
 
 		Mono<SecurityContext> emptySecurityContext() {
@@ -317,29 +351,30 @@ public abstract class AbstractWebFluxEndpointHandlerMapping extends RequestMappi
 		public Mono<ResponseEntity<Object>> handle(ServerWebExchange exchange, Map<String, String> body) {
 			Map<String, Object> arguments = getArguments(exchange, body);
 			OperationArgumentResolver serverNamespaceArgumentResolver = OperationArgumentResolver
-					.of(WebServerNamespace.class, () -> WebServerNamespace
-							.from(WebServerApplicationContext.getServerNamespace(exchange.getApplicationContext())));
+				.of(WebServerNamespace.class, () -> WebServerNamespace
+					.from(WebServerApplicationContext.getServerNamespace(exchange.getApplicationContext())));
 			return this.securityContextSupplier.get()
-					.map((securityContext) -> new InvocationContext(securityContext, arguments,
-							serverNamespaceArgumentResolver,
-							new ProducibleOperationArgumentResolver(
-									() -> exchange.getRequest().getHeaders().get("Accept"))))
-					.flatMap((invocationContext) -> handleResult((Publisher<?>) this.invoker.invoke(invocationContext),
-							exchange.getRequest().getMethod()));
+				.map((securityContext) -> new InvocationContext(securityContext, arguments,
+						serverNamespaceArgumentResolver,
+						new ProducibleOperationArgumentResolver(
+								() -> exchange.getRequest().getHeaders().get("Accept"))))
+				.flatMap((invocationContext) -> handleResult((Publisher<?>) this.invoker.invoke(invocationContext),
+						exchange.getRequest().getMethod()));
 		}
 
 		private Map<String, Object> getArguments(ServerWebExchange exchange, Map<String, String> body) {
 			Map<String, Object> arguments = new LinkedHashMap<>(getTemplateVariables(exchange));
 			String matchAllRemainingPathSegmentsVariable = this.operation.getRequestPredicate()
-					.getMatchAllRemainingPathSegmentsVariable();
+				.getMatchAllRemainingPathSegmentsVariable();
 			if (matchAllRemainingPathSegmentsVariable != null) {
 				arguments.put(matchAllRemainingPathSegmentsVariable, getRemainingPathSegments(exchange));
 			}
 			if (body != null) {
 				arguments.putAll(body);
 			}
-			exchange.getRequest().getQueryParams()
-					.forEach((name, values) -> arguments.put(name, (values.size() != 1) ? values : values.get(0)));
+			exchange.getRequest()
+				.getQueryParams()
+				.forEach((name, values) -> arguments.put(name, (values.size() != 1) ? values : values.get(0)));
 			return arguments;
 		}
 
@@ -347,7 +382,8 @@ public abstract class AbstractWebFluxEndpointHandlerMapping extends RequestMappi
 			PathPattern pathPattern = exchange.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
 			if (pathPattern.hasPatternSyntax()) {
 				String remainingSegments = pathPattern
-						.extractPathWithinPattern(exchange.getRequest().getPath().pathWithinApplication()).value();
+					.extractPathWithinPattern(exchange.getRequest().getPath().pathWithinApplication())
+					.value();
 				return tokenizePathSegments(remainingSegments);
 			}
 			return tokenizePathSegments(pathPattern.toString());
@@ -371,22 +407,23 @@ public abstract class AbstractWebFluxEndpointHandlerMapping extends RequestMappi
 			if (result instanceof Flux) {
 				result = ((Flux<?>) result).collectList();
 			}
-			return Mono.from(result).map(this::toResponseEntity)
-					.onErrorMap(InvalidEndpointRequestException.class,
-							(ex) -> new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getReason()))
-					.defaultIfEmpty(new ResponseEntity<>(
-							(httpMethod != HttpMethod.GET) ? HttpStatus.NO_CONTENT : HttpStatus.NOT_FOUND));
+			return Mono.from(result)
+				.map(this::toResponseEntity)
+				.onErrorMap(InvalidEndpointRequestException.class,
+						(ex) -> new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getReason()))
+				.defaultIfEmpty(new ResponseEntity<>(
+						(httpMethod != HttpMethod.GET) ? HttpStatus.NO_CONTENT : HttpStatus.NOT_FOUND));
 		}
 
 		private ResponseEntity<Object> toResponseEntity(Object response) {
-			if (!(response instanceof WebEndpointResponse)) {
+			if (!(response instanceof WebEndpointResponse<?> webEndpointResponse)) {
 				return new ResponseEntity<>(response, HttpStatus.OK);
 			}
-			WebEndpointResponse<?> webEndpointResponse = (WebEndpointResponse<?>) response;
 			MediaType contentType = (webEndpointResponse.getContentType() != null)
 					? new MediaType(webEndpointResponse.getContentType()) : null;
-			return ResponseEntity.status(webEndpointResponse.getStatus()).contentType(contentType)
-					.body(webEndpointResponse.getBody());
+			return ResponseEntity.status(webEndpointResponse.getStatus())
+				.contentType(contentType)
+				.body(webEndpointResponse.getBody());
 		}
 
 		@Override
@@ -486,8 +523,9 @@ public abstract class AbstractWebFluxEndpointHandlerMapping extends RequestMappi
 		@Override
 		public boolean isUserInRole(String role) {
 			String authority = (!role.startsWith(ROLE_PREFIX)) ? ROLE_PREFIX + role : role;
-			return AuthorityAuthorizationManager.hasAuthority(authority).check(this::getAuthentication, null)
-					.isGranted();
+			return AuthorityAuthorizationManager.hasAuthority(authority)
+				.check(this::getAuthentication, null)
+				.isGranted();
 		}
 
 	}

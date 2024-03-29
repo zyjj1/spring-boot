@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,7 +51,7 @@ import org.springframework.util.StringUtils;
  * {@link ConfigDataEnvironmentContributors} by wrapping property sources from the Spring
  * {@link Environment} and adding the initial set of locations.
  * <p>
- * The initial locations can be influenced via the {@link #LOCATION_PROPERTY},
+ * The initial locations can be influenced through the {@link #LOCATION_PROPERTY},
  * {@value #ADDITIONAL_LOCATION_PROPERTY} and {@value #IMPORT_PROPERTY} properties. If no
  * explicit properties are set, the {@link #DEFAULT_SEARCH_LOCATIONS} will be used.
  *
@@ -96,7 +96,7 @@ class ConfigDataEnvironment {
 	private static final ConfigDataLocation[] EMPTY_LOCATIONS = new ConfigDataLocation[0];
 
 	private static final Bindable<ConfigDataLocation[]> CONFIG_DATA_LOCATION_ARRAY = Bindable
-			.of(ConfigDataLocation[].class);
+		.of(ConfigDataLocation[].class);
 
 	private static final Bindable<List<String>> STRING_LIST = Bindable.listOf(String.class);
 
@@ -142,7 +142,7 @@ class ConfigDataEnvironment {
 		this.logFactory = logFactory;
 		this.logger = logFactory.getLog(getClass());
 		this.notFoundAction = binder.bind(ON_NOT_FOUND_PROPERTY, ConfigDataNotFoundAction.class)
-				.orElse(ConfigDataNotFoundAction.FAIL);
+			.orElse(ConfigDataNotFoundAction.FAIL);
 		this.bootstrapContext = bootstrapContext;
 		this.environment = environment;
 		this.resolvers = createConfigDataLocationResolvers(logFactory, bootstrapContext, binder, resourceLoader);
@@ -150,7 +150,7 @@ class ConfigDataEnvironment {
 		this.environmentUpdateListener = (environmentUpdateListener != null) ? environmentUpdateListener
 				: ConfigDataEnvironmentUpdateListener.NONE;
 		this.loaders = new ConfigDataLoaders(logFactory, bootstrapContext,
-				SpringFactoriesLoader.forDefaultResourceLocation());
+				SpringFactoriesLoader.forDefaultResourceLocation(resourceLoader.getClassLoader()));
 		this.contributors = createContributors(binder);
 	}
 
@@ -172,20 +172,23 @@ class ConfigDataEnvironment {
 			else {
 				this.logger.trace(LogMessage.format("Creating wrapped config data contributor for '%s'",
 						propertySource.getName()));
-				contributors.add(ConfigDataEnvironmentContributor.ofExisting(propertySource));
+				contributors.add(ConfigDataEnvironmentContributor.ofExisting(propertySource,
+						this.environment.getConversionService()));
 			}
 		}
 		contributors.addAll(getInitialImportContributors(binder));
 		if (defaultPropertySource != null) {
 			this.logger.trace("Creating wrapped config data contributor for default property source");
-			contributors.add(ConfigDataEnvironmentContributor.ofExisting(defaultPropertySource));
+			contributors.add(ConfigDataEnvironmentContributor.ofExisting(defaultPropertySource,
+					this.environment.getConversionService()));
 		}
 		return createContributors(contributors);
 	}
 
 	protected ConfigDataEnvironmentContributors createContributors(
 			List<ConfigDataEnvironmentContributor> contributors) {
-		return new ConfigDataEnvironmentContributors(this.logFactory, this.bootstrapContext, contributors);
+		return new ConfigDataEnvironmentContributors(this.logFactory, this.bootstrapContext, contributors,
+				this.environment.getConversionService());
 	}
 
 	ConfigDataEnvironmentContributors getContributors() {
@@ -215,7 +218,7 @@ class ConfigDataEnvironment {
 
 	private ConfigDataEnvironmentContributor createInitialImportContributor(ConfigDataLocation location) {
 		this.logger.trace(LogMessage.format("Adding initial config data import from location '%s'", location));
-		return ConfigDataEnvironmentContributor.ofInitialImport(location);
+		return ConfigDataEnvironmentContributor.ofInitialImport(location, this.environment.getConversionService());
 	}
 
 	/**
@@ -288,7 +291,7 @@ class ConfigDataEnvironment {
 	private Collection<? extends String> getIncludedProfiles(ConfigDataEnvironmentContributors contributors,
 			ConfigDataActivationContext activationContext) {
 		PlaceholdersResolver placeholdersResolver = new ConfigDataEnvironmentContributorPlaceholdersResolver(
-				contributors, activationContext, null, true);
+				contributors, activationContext, null, true, this.environment.getConversionService());
 		Set<String> result = new LinkedHashSet<>();
 		for (ConfigDataEnvironmentContributor contributor : contributors) {
 			ConfigurationPropertySource source = contributor.getConfigurationPropertySource();
@@ -317,8 +320,9 @@ class ConfigDataEnvironment {
 
 	private void registerBootstrapBinder(ConfigDataEnvironmentContributors contributors,
 			ConfigDataActivationContext activationContext, BinderOption... binderOptions) {
-		this.bootstrapContext.register(Binder.class, InstanceSupplier
-				.from(() -> contributors.getBinder(activationContext, binderOptions)).withScope(Scope.PROTOTYPE));
+		this.bootstrapContext.register(Binder.class,
+				InstanceSupplier.from(() -> contributors.getBinder(activationContext, binderOptions))
+					.withScope(Scope.PROTOTYPE));
 	}
 
 	private void applyToEnvironment(ConfigDataEnvironmentContributors contributors,
@@ -344,12 +348,12 @@ class ConfigDataEnvironment {
 			PropertySource<?> propertySource = contributor.getPropertySource();
 			if (contributor.getKind() == ConfigDataEnvironmentContributor.Kind.BOUND_IMPORT && propertySource != null) {
 				if (!contributor.isActive(activationContext)) {
-					this.logger.trace(
-							LogMessage.format("Skipping inactive property source '%s'", propertySource.getName()));
+					this.logger
+						.trace(LogMessage.format("Skipping inactive property source '%s'", propertySource.getName()));
 				}
 				else {
 					this.logger
-							.trace(LogMessage.format("Adding imported property source '%s'", propertySource.getName()));
+						.trace(LogMessage.format("Adding imported property source '%s'", propertySource.getName()));
 					propertySources.addLast(propertySource);
 					this.environmentUpdateListener.onPropertySourceAdded(propertySource, contributor.getLocation(),
 							contributor.getResource());

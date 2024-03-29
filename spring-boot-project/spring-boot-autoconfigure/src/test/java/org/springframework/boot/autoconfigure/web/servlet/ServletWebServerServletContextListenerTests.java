@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import org.springframework.boot.testsupport.classpath.ForkedClassPath;
 import org.springframework.boot.testsupport.web.servlet.DirtiesUrlFactories;
-import org.springframework.boot.testsupport.web.servlet.Servlet5ClassPathOverrides;
 import org.springframework.boot.web.embedded.jetty.JettyServletWebServerFactory;
 import org.springframework.boot.web.embedded.tomcat.TomcatServletWebServerFactory;
 import org.springframework.boot.web.embedded.undertow.UndertowServletWebServerFactory;
@@ -56,7 +55,8 @@ class ServletWebServerServletContextListenerTests {
 		AnnotationConfigServletWebServerApplicationContext context = new AnnotationConfigServletWebServerApplicationContext(
 				ServletListenerRegistrationBeanConfiguration.class, configuration);
 		ServletContextListener servletContextListener = (ServletContextListener) context
-				.getBean("registration", ServletListenerRegistrationBean.class).getListener();
+			.getBean("registration", ServletListenerRegistrationBean.class)
+			.getListener();
 		then(servletContextListener).should().contextInitialized(any(ServletContextEvent.class));
 		context.close();
 	}
@@ -89,7 +89,6 @@ class ServletWebServerServletContextListenerTests {
 
 	}
 
-	@Servlet5ClassPathOverrides
 	@Configuration(proxyBeanMethods = false)
 	static class JettyConfiguration {
 

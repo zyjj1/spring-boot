@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -40,7 +41,7 @@ import org.springframework.boot.buildpack.platform.docker.DockerApi;
 import org.springframework.boot.buildpack.platform.docker.DockerApi.ContainerApi;
 import org.springframework.boot.buildpack.platform.docker.DockerApi.ImageApi;
 import org.springframework.boot.buildpack.platform.docker.DockerApi.VolumeApi;
-import org.springframework.boot.buildpack.platform.docker.configuration.DockerHost;
+import org.springframework.boot.buildpack.platform.docker.configuration.DockerConfiguration.DockerHostConfiguration;
 import org.springframework.boot.buildpack.platform.docker.configuration.ResolvedDockerHost;
 import org.springframework.boot.buildpack.platform.docker.type.Binding;
 import org.springframework.boot.buildpack.platform.docker.type.ContainerConfig;
@@ -135,7 +136,7 @@ class LifecycleTests {
 		Lifecycle lifecycle = createLifecycle();
 		lifecycle.execute();
 		assertThatIllegalStateException().isThrownBy(lifecycle::execute)
-				.withMessage("Lifecycle has already been executed");
+			.withMessage("Lifecycle has already been executed");
 	}
 
 	@Test
@@ -144,7 +145,7 @@ class LifecycleTests {
 		given(this.docker.container().create(any(), any())).willAnswer(answerWithGeneratedContainerId());
 		given(this.docker.container().wait(any())).willReturn(ContainerStatus.of(9, null));
 		assertThatExceptionOfType(BuilderException.class).isThrownBy(() -> createLifecycle().execute())
-				.withMessage("Builder lifecycle 'creator' failed with status code 9");
+			.withMessage("Builder lifecycle 'creator' failed with status code 9");
 	}
 
 	@Test
@@ -165,8 +166,8 @@ class LifecycleTests {
 		given(this.docker.container().create(any(), any())).willAnswer(answerWithGeneratedContainerId());
 		given(this.docker.container().wait(any())).willReturn(ContainerStatus.of(0, null));
 		assertThatIllegalStateException()
-				.isThrownBy(() -> createLifecycle("builder-metadata-unsupported-api.json").execute())
-				.withMessageContaining("Detected platform API versions '0.2' are not included in supported versions");
+			.isThrownBy(() -> createLifecycle("builder-metadata-unsupported-api.json").execute())
+			.withMessageContaining("Detected platform API versions '0.2' are not included in supported versions");
 	}
 
 	@Test
@@ -175,9 +176,8 @@ class LifecycleTests {
 		given(this.docker.container().create(any(), any())).willAnswer(answerWithGeneratedContainerId());
 		given(this.docker.container().wait(any())).willReturn(ContainerStatus.of(0, null));
 		assertThatIllegalStateException()
-				.isThrownBy(() -> createLifecycle("builder-metadata-unsupported-apis.json").execute())
-				.withMessageContaining(
-						"Detected platform API versions '0.1,0.2' are not included in supported versions");
+			.isThrownBy(() -> createLifecycle("builder-metadata-unsupported-apis.json").execute())
+			.withMessageContaining("Detected platform API versions '0.1,0.2' are not included in supported versions");
 	}
 
 	@Test
@@ -212,10 +212,57 @@ class LifecycleTests {
 		given(this.docker.container().create(any())).willAnswer(answerWithGeneratedContainerId());
 		given(this.docker.container().create(any(), any())).willAnswer(answerWithGeneratedContainerId());
 		given(this.docker.container().wait(any())).willReturn(ContainerStatus.of(0, null));
-		BuildRequest request = getTestRequest().withBuildCache(Cache.volume("build-volume"))
-				.withLaunchCache(Cache.volume("launch-volume"));
+		BuildRequest request = getTestRequest().withBuildWorkspace(Cache.volume("work-volume"))
+			.withBuildCache(Cache.volume("build-volume"))
+			.withLaunchCache(Cache.volume("launch-volume"));
 		createLifecycle(request).execute();
 		assertPhaseWasRun("creator", withExpectedConfig("lifecycle-creator-cache-volumes.json"));
+		assertThat(this.out.toString()).contains("Successfully built image 'docker.io/library/my-application:latest'");
+	}
+
+	@Test
+	void executeWithCacheBindMountsExecutesPhases() throws Exception {
+		given(this.docker.container().create(any())).willAnswer(answerWithGeneratedContainerId());
+		given(this.docker.container().create(any(), any())).willAnswer(answerWithGeneratedContainerId());
+		given(this.docker.container().wait(any())).willReturn(ContainerStatus.of(0, null));
+		BuildRequest request = getTestRequest().withBuildWorkspace(Cache.bind("/tmp/work"))
+			.withBuildCache(Cache.bind("/tmp/build-cache"))
+			.withLaunchCache(Cache.bind("/tmp/launch-cache"));
+		createLifecycle(request).execute();
+		assertPhaseWasRun("creator", withExpectedConfig("lifecycle-creator-cache-bind-mounts.json"));
+		assertThat(this.out.toString()).contains("Successfully built image 'docker.io/library/my-application:latest'");
+	}
+
+	@Test
+	void executeWithCreatedDateExecutesPhases() throws Exception {
+		given(this.docker.container().create(any())).willAnswer(answerWithGeneratedContainerId());
+		given(this.docker.container().create(any(), any())).willAnswer(answerWithGeneratedContainerId());
+		given(this.docker.container().wait(any())).willReturn(ContainerStatus.of(0, null));
+		BuildRequest request = getTestRequest().withCreatedDate("2020-07-01T12:34:56Z");
+		createLifecycle(request).execute();
+		assertPhaseWasRun("creator", withExpectedConfig("lifecycle-creator-created-date.json"));
+		assertThat(this.out.toString()).contains("Successfully built image 'docker.io/library/my-application:latest'");
+	}
+
+	@Test
+	void executeWithApplicationDirectoryExecutesPhases() throws Exception {
+		given(this.docker.container().create(any())).willAnswer(answerWithGeneratedContainerId());
+		given(this.docker.container().create(any(), any())).willAnswer(answerWithGeneratedContainerId());
+		given(this.docker.container().wait(any())).willReturn(ContainerStatus.of(0, null));
+		BuildRequest request = getTestRequest().withApplicationDirectory("/application");
+		createLifecycle(request).execute();
+		assertPhaseWasRun("creator", withExpectedConfig("lifecycle-creator-app-dir.json"));
+		assertThat(this.out.toString()).contains("Successfully built image 'docker.io/library/my-application:latest'");
+	}
+
+	@Test
+	void executeWithSecurityOptionsExecutesPhases() throws Exception {
+		given(this.docker.container().create(any())).willAnswer(answerWithGeneratedContainerId());
+		given(this.docker.container().create(any(), any())).willAnswer(answerWithGeneratedContainerId());
+		given(this.docker.container().wait(any())).willReturn(ContainerStatus.of(0, null));
+		BuildRequest request = getTestRequest().withSecurityOptions(List.of("label=user:USER", "label=role:ROLE"));
+		createLifecycle(request).execute();
+		assertPhaseWasRun("creator", withExpectedConfig("lifecycle-creator-security-opts.json", true));
 		assertThat(this.out.toString()).contains("Successfully built image 'docker.io/library/my-application:latest'");
 	}
 
@@ -225,7 +272,8 @@ class LifecycleTests {
 		given(this.docker.container().create(any(), any())).willAnswer(answerWithGeneratedContainerId());
 		given(this.docker.container().wait(any())).willReturn(ContainerStatus.of(0, null));
 		BuildRequest request = getTestRequest();
-		createLifecycle(request, ResolvedDockerHost.from(new DockerHost("tcp://192.168.1.2:2376"))).execute();
+		createLifecycle(request, ResolvedDockerHost.from(DockerHostConfiguration.forAddress("tcp://192.168.1.2:2376")))
+			.execute();
 		assertPhaseWasRun("creator", withExpectedConfig("lifecycle-creator-inherit-remote.json"));
 		assertThat(this.out.toString()).contains("Successfully built image 'docker.io/library/my-application:latest'");
 	}
@@ -236,7 +284,8 @@ class LifecycleTests {
 		given(this.docker.container().create(any(), any())).willAnswer(answerWithGeneratedContainerId());
 		given(this.docker.container().wait(any())).willReturn(ContainerStatus.of(0, null));
 		BuildRequest request = getTestRequest();
-		createLifecycle(request, ResolvedDockerHost.from(new DockerHost("/var/alt.sock"))).execute();
+		createLifecycle(request, ResolvedDockerHost.from(DockerHostConfiguration.forAddress("/var/alt.sock")))
+			.execute();
 		assertPhaseWasRun("creator", withExpectedConfig("lifecycle-creator-inherit-local.json"));
 		assertThat(this.out.toString()).contains("Successfully built image 'docker.io/library/my-application:latest'");
 	}
@@ -321,12 +370,16 @@ class LifecycleTests {
 	}
 
 	private IOConsumer<ContainerConfig> withExpectedConfig(String name) {
+		return withExpectedConfig(name, false);
+	}
+
+	private IOConsumer<ContainerConfig> withExpectedConfig(String name, boolean expectSecurityOptAlways) {
 		return (config) -> {
 			try {
 				InputStream in = getClass().getResourceAsStream(name);
 				String jsonString = FileCopyUtils.copyToString(new InputStreamReader(in, StandardCharsets.UTF_8));
 				JSONObject json = new JSONObject(jsonString);
-				if (Platform.isWindows()) {
+				if (!expectSecurityOptAlways && Platform.isWindows()) {
 					JSONObject hostConfig = json.getJSONObject("HostConfig");
 					hostConfig.remove("SecurityOpt");
 				}

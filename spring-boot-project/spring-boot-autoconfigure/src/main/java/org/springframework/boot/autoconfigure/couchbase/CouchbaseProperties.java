@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -117,7 +117,7 @@ public class CouchbaseProperties {
 		 * Length of time an HTTP connection may remain idle before it is closed and
 		 * removed from the pool.
 		 */
-		private Duration idleHttpConnectionTimeout = Duration.ofMillis(4500);
+		private Duration idleHttpConnectionTimeout = Duration.ofSeconds(1);
 
 		public int getMinEndpoints() {
 			return this.minEndpoints;
@@ -148,43 +148,30 @@ public class CouchbaseProperties {
 	public static class Ssl {
 
 		/**
-		 * Whether to enable SSL support. Enabled automatically if a "keyStore" is
-		 * provided unless specified otherwise.
+		 * Whether to enable SSL support. Enabled automatically if a "bundle" is provided
+		 * unless specified otherwise.
 		 */
 		private Boolean enabled;
 
 		/**
-		 * Path to the JVM key store that holds the certificates.
+		 * SSL bundle name.
 		 */
-		private String keyStore;
-
-		/**
-		 * Password used to access the key store.
-		 */
-		private String keyStorePassword;
+		private String bundle;
 
 		public Boolean getEnabled() {
-			return (this.enabled != null) ? this.enabled : StringUtils.hasText(this.keyStore);
+			return (this.enabled != null) ? this.enabled : StringUtils.hasText(this.bundle);
 		}
 
 		public void setEnabled(Boolean enabled) {
 			this.enabled = enabled;
 		}
 
-		public String getKeyStore() {
-			return this.keyStore;
+		public String getBundle() {
+			return this.bundle;
 		}
 
-		public void setKeyStore(String keyStore) {
-			this.keyStore = keyStore;
-		}
-
-		public String getKeyStorePassword() {
-			return this.keyStorePassword;
-		}
-
-		public void setKeyStorePassword(String keyStorePassword) {
-			this.keyStorePassword = keyStorePassword;
+		public void setBundle(String bundle) {
+			this.bundle = bundle;
 		}
 
 	}

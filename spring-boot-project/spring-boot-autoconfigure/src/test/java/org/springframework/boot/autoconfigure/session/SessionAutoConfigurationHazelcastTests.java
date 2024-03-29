@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.session.FlushMode;
 import org.springframework.session.SaveMode;
+import org.springframework.session.config.SessionRepositoryCustomizer;
 import org.springframework.session.data.mongo.MongoIndexedSessionRepository;
 import org.springframework.session.data.redis.RedisIndexedSessionRepository;
 import org.springframework.session.hazelcast.HazelcastIndexedSessionRepository;
@@ -49,10 +50,10 @@ import static org.mockito.Mockito.mock;
 class SessionAutoConfigurationHazelcastTests extends AbstractSessionAutoConfigurationTests {
 
 	private final WebApplicationContextRunner contextRunner = new WebApplicationContextRunner()
-			.withClassLoader(new FilteredClassLoader(JdbcIndexedSessionRepository.class,
-					RedisIndexedSessionRepository.class, MongoIndexedSessionRepository.class))
-			.withConfiguration(AutoConfigurations.of(SessionAutoConfiguration.class))
-			.withUserConfiguration(HazelcastConfiguration.class);
+		.withClassLoader(new FilteredClassLoader(JdbcIndexedSessionRepository.class,
+				RedisIndexedSessionRepository.class, MongoIndexedSessionRepository.class))
+		.withConfiguration(AutoConfigurations.of(SessionAutoConfiguration.class))
+		.withUserConfiguration(HazelcastConfiguration.class);
 
 	@Test
 	void defaultConfig() {
@@ -61,9 +62,10 @@ class SessionAutoConfigurationHazelcastTests extends AbstractSessionAutoConfigur
 
 	@Test
 	void hazelcastTakesPrecedenceOverMongo() {
-		this.contextRunner.withClassLoader(
-				new FilteredClassLoader(RedisIndexedSessionRepository.class, JdbcIndexedSessionRepository.class))
-				.run(this::validateDefaultConfig);
+		this.contextRunner
+			.withClassLoader(
+					new FilteredClassLoader(RedisIndexedSessionRepository.class, JdbcIndexedSessionRepository.class))
+			.run(this::validateDefaultConfig);
 	}
 
 	@Test
@@ -111,6 +113,17 @@ class SessionAutoConfigurationHazelcastTests extends AbstractSessionAutoConfigur
 		});
 	}
 
+	@Test
+	void whenTheUserDefinesTheirOwnSessionRepositoryCustomizerThenDefaultConfigurationIsOverwritten() {
+		this.contextRunner.withUserConfiguration(CustomizerConfiguration.class)
+			.withPropertyValues("spring.session.hazelcast.save-mode=on-get-attribute")
+			.run((context) -> {
+				HazelcastIndexedSessionRepository repository = validateSessionRepository(context,
+						HazelcastIndexedSessionRepository.class);
+				assertThat(repository).hasFieldOrPropertyWithValue("saveMode", SaveMode.ALWAYS);
+			});
+	}
+
 	@Configuration(proxyBeanMethods = false)
 	static class HazelcastConfiguration {
 
@@ -122,6 +135,16 @@ class SessionAutoConfigurationHazelcastTests extends AbstractSessionAutoConfigur
 			given(mock.getMap("spring:session:sessions")).willReturn(map);
 			given(mock.getMap("foo:bar:biz")).willReturn(map);
 			return mock;
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class CustomizerConfiguration {
+
+		@Bean
+		SessionRepositoryCustomizer<HazelcastIndexedSessionRepository> sessionRepositoryCustomizer() {
+			return (repository) -> repository.setSaveMode(SaveMode.ALWAYS);
 		}
 
 	}

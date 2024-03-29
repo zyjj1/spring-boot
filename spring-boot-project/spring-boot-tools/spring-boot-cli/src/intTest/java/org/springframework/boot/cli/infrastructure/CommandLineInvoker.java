@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,8 +40,8 @@ import org.springframework.util.Assert;
 import org.springframework.util.StreamUtils;
 
 /**
- * Utility to invoke the command line in the same way as a user would, i.e. via the shell
- * script in the package's bin directory.
+ * Utility to invoke the command line in the same way as a user would, i.e. through the
+ * shell script in the package's bin directory.
  *
  * @author Andy Wilkinson
  * @author Phillip Webb
@@ -132,9 +132,9 @@ public final class CommandLineInvoker {
 		public Invocation(Process process) {
 			this.process = process;
 			this.streamReaders
-					.add(new Thread(new StreamReadingRunnable(this.process.getErrorStream(), this.err, this.combined)));
+				.add(new Thread(new StreamReadingRunnable(this.process.getErrorStream(), this.err, this.combined)));
 			this.streamReaders
-					.add(new Thread(new StreamReadingRunnable(this.process.getInputStream(), this.out, this.combined)));
+				.add(new Thread(new StreamReadingRunnable(this.process.getInputStream(), this.out, this.combined)));
 			for (Thread streamReader : this.streamReaders) {
 				streamReader.start();
 			}

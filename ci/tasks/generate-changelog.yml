@@ -3,12 +3,10 @@ platform: linux
 image_resource:
   type: registry-image
   source:
-    repository: springio/github-changelog-generator
+    repository: ((dockerhub-proxy-cache))springio/github-changelog-generator
     tag: '0.0.8'
-    registry_mirror:
-      host: ((docker-hub-mirror))
-      username: ((docker-hub-mirror-username))
-      password: ((docker-hub-mirror-password))
+    username: ((docker-hub-username))
+    password: ((docker-hub-password))
 inputs:
 - name: git-repo
 - name: artifactory-repo

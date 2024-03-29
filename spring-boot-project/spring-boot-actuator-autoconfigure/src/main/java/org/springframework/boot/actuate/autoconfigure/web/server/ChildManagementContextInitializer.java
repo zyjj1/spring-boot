@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,12 +33,14 @@ import org.springframework.boot.actuate.autoconfigure.web.ManagementContextFacto
 import org.springframework.boot.autoconfigure.context.PropertyPlaceholderAutoConfiguration;
 import org.springframework.boot.context.event.ApplicationFailedEvent;
 import org.springframework.boot.web.context.ConfigurableWebServerApplicationContext;
-import org.springframework.boot.web.context.WebServerInitializedEvent;
+import org.springframework.boot.web.context.WebServerApplicationContext;
+import org.springframework.boot.web.context.WebServerGracefulShutdownLifecycle;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextInitializer;
 import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.context.SmartLifecycle;
 import org.springframework.context.annotation.AnnotationConfigRegistry;
 import org.springframework.context.aot.ApplicationContextAotGenerator;
 import org.springframework.context.event.ContextClosedEvent;
@@ -55,14 +57,15 @@ import org.springframework.util.Assert;
  * @author Andy Wilkinson
  * @author Phillip Webb
  */
-class ChildManagementContextInitializer
-		implements ApplicationListener<WebServerInitializedEvent>, BeanRegistrationAotProcessor {
+class ChildManagementContextInitializer implements BeanRegistrationAotProcessor, SmartLifecycle {
 
 	private final ManagementContextFactory managementContextFactory;
 
 	private final ApplicationContext parentContext;
 
 	private final ApplicationContextInitializer<ConfigurableApplicationContext> applicationContextInitializer;
+
+	private volatile ConfigurableApplicationContext managementContext;
 
 	ChildManagementContextInitializer(ManagementContextFactory managementContextFactory,
 			ApplicationContext parentContext) {
@@ -79,12 +82,36 @@ class ChildManagementContextInitializer
 	}
 
 	@Override
-	public void onApplicationEvent(WebServerInitializedEvent event) {
-		if (event.getApplicationContext().equals(this.parentContext)) {
+	public void start() {
+		if (!(this.parentContext instanceof WebServerApplicationContext)) {
+			return;
+		}
+		if (this.managementContext == null) {
 			ConfigurableApplicationContext managementContext = createManagementContext();
 			registerBeans(managementContext);
 			managementContext.refresh();
+			this.managementContext = managementContext;
 		}
+		else {
+			this.managementContext.start();
+		}
+	}
+
+	@Override
+	public void stop() {
+		if (this.managementContext != null) {
+			this.managementContext.stop();
+		}
+	}
+
+	@Override
+	public boolean isRunning() {
+		return this.managementContext != null && this.managementContext.isRunning();
+	}
+
+	@Override
+	public int getPhase() {
+		return WebServerGracefulShutdownLifecycle.SMART_LIFECYCLE_PHASE + 512;
 	}
 
 	@Override
@@ -121,7 +148,7 @@ class ChildManagementContextInitializer
 
 	protected final ConfigurableApplicationContext createManagementContext() {
 		ConfigurableApplicationContext managementContext = this.managementContextFactory
-				.createManagementContext(this.parentContext);
+			.createManagementContext(this.parentContext);
 		managementContext.setId(this.parentContext.getId() + ":management");
 		if (managementContext instanceof ConfigurableWebServerApplicationContext webServerApplicationContext) {
 			webServerApplicationContext.setServerNamespace("management");
@@ -162,9 +189,10 @@ class ChildManagementContextInitializer
 		public void applyTo(GenerationContext generationContext, BeanRegistrationCode beanRegistrationCode) {
 			GenerationContext managementGenerationContext = generationContext.withName("Management");
 			ClassName generatedInitializerClassName = new ApplicationContextAotGenerator()
-					.processAheadOfTime(this.managementContext, managementGenerationContext);
-			GeneratedMethod postProcessorMethod = beanRegistrationCode.getMethods().add("addManagementInitializer",
-					(method) -> method.addJavadoc("Use AOT management context initialization")
+				.processAheadOfTime(this.managementContext, managementGenerationContext);
+			GeneratedMethod postProcessorMethod = beanRegistrationCode.getMethods()
+				.add("addManagementInitializer",
+						(method) -> method.addJavadoc("Use AOT management context initialization")
 							.addModifiers(Modifier.PRIVATE, Modifier.STATIC)
 							.addParameter(RegisteredBean.class, "registeredBean")
 							.addParameter(ChildManagementContextInitializer.class, "instance")
@@ -216,8 +244,8 @@ class ChildManagementContextInitializer
 		}
 
 		static void addIfPossible(ApplicationContext parentContext, ConfigurableApplicationContext childContext) {
-			if (parentContext instanceof ConfigurableApplicationContext) {
-				add((ConfigurableApplicationContext) parentContext, childContext);
+			if (parentContext instanceof ConfigurableApplicationContext configurableApplicationContext) {
+				add(configurableApplicationContext, childContext);
 			}
 		}
 

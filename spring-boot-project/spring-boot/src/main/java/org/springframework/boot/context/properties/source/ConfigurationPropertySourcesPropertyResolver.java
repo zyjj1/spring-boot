@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,6 +49,7 @@ class ConfigurationPropertySourcesPropertyResolver extends AbstractPropertyResol
 					return attached.findConfigurationProperty(name) != null;
 				}
 				catch (Exception ex) {
+					// Ignore
 				}
 			}
 		}
@@ -91,6 +92,7 @@ class ConfigurationPropertySourcesPropertyResolver extends AbstractPropertyResol
 					return (configurationProperty != null) ? configurationProperty.getValue() : null;
 				}
 				catch (Exception ex) {
+					// Ignore
 				}
 			}
 		}
@@ -99,7 +101,7 @@ class ConfigurationPropertySourcesPropertyResolver extends AbstractPropertyResol
 
 	private ConfigurationPropertySourcesPropertySource getAttached() {
 		ConfigurationPropertySourcesPropertySource attached = (ConfigurationPropertySourcesPropertySource) ConfigurationPropertySources
-				.getAttached(this.propertySources);
+			.getAttached(this.propertySources);
 		Iterable<ConfigurationPropertySource> attachedSource = (attached != null) ? attached.getSource() : null;
 		if ((attachedSource instanceof SpringConfigurationPropertySources springSource)
 				&& springSource.isUsingSources(this.propertySources)) {

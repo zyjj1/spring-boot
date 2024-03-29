@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -101,7 +101,7 @@ final class BuildpackLayersMetadata extends MappedObject {
 		return new BuildpackLayersMetadata(node);
 	}
 
-	private static class Buildpacks {
+	private static final class Buildpacks {
 
 		private final Map<String, BuildpackVersions> buildpacks = new HashMap<>();
 
@@ -118,14 +118,15 @@ final class BuildpackLayersMetadata extends MappedObject {
 
 		private static Buildpacks fromJson(JsonNode node) {
 			Buildpacks buildpacks = new Buildpacks();
-			node.fields().forEachRemaining((field) -> buildpacks.addBuildpackVersions(field.getKey(),
-					BuildpackVersions.fromJson(field.getValue())));
+			node.fields()
+				.forEachRemaining((field) -> buildpacks.addBuildpackVersions(field.getKey(),
+						BuildpackVersions.fromJson(field.getValue())));
 			return buildpacks;
 		}
 
 	}
 
-	private static class BuildpackVersions {
+	private static final class BuildpackVersions {
 
 		private final Map<String, BuildpackLayerDetails> versions = new HashMap<>();
 
@@ -139,8 +140,9 @@ final class BuildpackLayersMetadata extends MappedObject {
 
 		private static BuildpackVersions fromJson(JsonNode node) {
 			BuildpackVersions versions = new BuildpackVersions();
-			node.fields().forEachRemaining((field) -> versions.addBuildpackVersion(field.getKey(),
-					BuildpackLayerDetails.fromJson(field.getValue())));
+			node.fields()
+				.forEachRemaining((field) -> versions.addBuildpackVersion(field.getKey(),
+						BuildpackLayerDetails.fromJson(field.getValue())));
 			return versions;
 		}
 

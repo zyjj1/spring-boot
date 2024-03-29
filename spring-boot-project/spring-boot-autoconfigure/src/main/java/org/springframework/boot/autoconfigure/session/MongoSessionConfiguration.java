@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,8 @@ import org.springframework.boot.context.properties.PropertyMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.data.mongodb.core.MongoOperations;
 import org.springframework.session.SessionRepository;
 import org.springframework.session.config.SessionRepositoryCustomizer;
@@ -47,13 +49,14 @@ import org.springframework.session.data.mongo.config.annotation.web.http.MongoHt
 class MongoSessionConfiguration {
 
 	@Bean
+	@Order(Ordered.HIGHEST_PRECEDENCE)
 	SessionRepositoryCustomizer<MongoIndexedSessionRepository> springBootSessionRepositoryCustomizer(
 			SessionProperties sessionProperties, MongoSessionProperties mongoSessionProperties,
 			ServerProperties serverProperties) {
 		PropertyMapper map = PropertyMapper.get().alwaysApplyingWhenNonNull();
 		return (sessionRepository) -> {
 			map.from(sessionProperties.determineTimeout(() -> serverProperties.getServlet().getSession().getTimeout()))
-					.to(sessionRepository::setDefaultMaxInactiveInterval);
+				.to(sessionRepository::setDefaultMaxInactiveInterval);
 			map.from(mongoSessionProperties::getCollectionName).to(sessionRepository::setCollectionName);
 		};
 	}

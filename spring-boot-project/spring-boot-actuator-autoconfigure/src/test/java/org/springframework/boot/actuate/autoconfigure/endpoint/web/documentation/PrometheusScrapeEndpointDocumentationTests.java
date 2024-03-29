@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@ package org.springframework.boot.actuate.autoconfigure.endpoint.web.documentatio
 
 import io.micrometer.core.instrument.Clock;
 import io.micrometer.core.instrument.binder.jvm.JvmMemoryMetrics;
-import io.micrometer.prometheus.PrometheusMeterRegistry;
 import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.exporter.common.TextFormat;
 import org.junit.jupiter.api.Test;
@@ -51,19 +50,21 @@ class PrometheusScrapeEndpointDocumentationTests extends MockMvcEndpointDocument
 	@Test
 	void prometheusOpenmetrics() throws Exception {
 		this.mockMvc.perform(get("/actuator/prometheus").accept(TextFormat.CONTENT_TYPE_OPENMETRICS_100))
-				.andExpect(status().isOk())
-				.andExpect(header().string("Content-Type", "application/openmetrics-text;version=1.0.0;charset=utf-8"))
-				.andDo(document("prometheus/openmetrics"));
+			.andExpect(status().isOk())
+			.andExpect(header().string("Content-Type", "application/openmetrics-text;version=1.0.0;charset=utf-8"))
+			.andDo(document("prometheus/openmetrics"));
 	}
 
 	@Test
 	void filteredPrometheus() throws Exception {
 		this.mockMvc
-				.perform(get("/actuator/prometheus").param("includedNames",
-						"jvm_memory_used_bytes,jvm_memory_committed_bytes"))
-				.andExpect(status().isOk())
-				.andDo(document("prometheus/names", queryParameters(parameterWithName("includedNames")
-						.description("Restricts the samples to those that match the names. Optional.").optional())));
+			.perform(get("/actuator/prometheus").param("includedNames",
+					"jvm_memory_used_bytes,jvm_memory_committed_bytes"))
+			.andExpect(status().isOk())
+			.andDo(document("prometheus/names",
+					queryParameters(parameterWithName("includedNames")
+						.description("Restricts the samples to those that match the names. Optional.")
+						.optional())));
 	}
 
 	@Configuration(proxyBeanMethods = false)
@@ -71,10 +72,11 @@ class PrometheusScrapeEndpointDocumentationTests extends MockMvcEndpointDocument
 	static class TestConfiguration {
 
 		@Bean
+		@SuppressWarnings("deprecation")
 		PrometheusScrapeEndpoint endpoint() {
 			CollectorRegistry collectorRegistry = new CollectorRegistry(true);
-			PrometheusMeterRegistry meterRegistry = new PrometheusMeterRegistry((key) -> null, collectorRegistry,
-					Clock.SYSTEM);
+			io.micrometer.prometheus.PrometheusMeterRegistry meterRegistry = new io.micrometer.prometheus.PrometheusMeterRegistry(
+					(key) -> null, collectorRegistry, Clock.SYSTEM);
 			new JvmMemoryMetrics().bindTo(meterRegistry);
 			return new PrometheusScrapeEndpoint(collectorRegistry);
 		}

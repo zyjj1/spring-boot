@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -66,7 +66,7 @@ public class StandardConfigDataLocationResolver
 
 	private static final Pattern URL_PREFIX = Pattern.compile("^([a-zA-Z][a-zA-Z0-9*]*?:)(.*$)");
 
-	private static final Pattern EXTENSION_HINT_PATTERN = Pattern.compile("^(.*)\\[(\\.\\w+)\\](?!\\[)$");
+	private static final Pattern EXTENSION_HINT_PATTERN = Pattern.compile("^(.*)\\[(\\.\\w+)](?!\\[)$");
 
 	private static final String NO_PROFILE = null;
 
@@ -228,6 +228,9 @@ public class StandardConfigDataLocationResolver
 				return Collections.singleton(reference);
 			}
 		}
+		if (configDataLocation.isOptional()) {
+			return Collections.emptySet();
+		}
 		throw new IllegalStateException("File extension is not known to any PropertySourceLoader. "
 				+ "If the location is meant to reference a directory, it must end in '/' or File.separator");
 	}
@@ -287,9 +290,10 @@ public class StandardConfigDataLocationResolver
 			String message = String.format("Config data location '%s' contains no subdirectories", location);
 			throw new ConfigDataLocationNotFoundException(location, message, null);
 		}
-		return Arrays.stream(subdirectories).filter(Resource::exists)
-				.map((resource) -> new StandardConfigDataResource(reference, resource, true))
-				.collect(Collectors.toCollection(LinkedHashSet::new));
+		return Arrays.stream(subdirectories)
+			.filter(Resource::exists)
+			.map((resource) -> new StandardConfigDataResource(reference, resource, true))
+			.collect(Collectors.toCollection(LinkedHashSet::new));
 	}
 
 	private List<StandardConfigDataResource> resolve(StandardConfigDataReference reference) {

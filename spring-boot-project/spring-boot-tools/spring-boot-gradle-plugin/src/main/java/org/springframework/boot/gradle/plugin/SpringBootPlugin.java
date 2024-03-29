@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -70,6 +70,10 @@ public class SpringBootPlugin implements Plugin<Project> {
 	 */
 	public static final String BOOT_BUILD_IMAGE_TASK_NAME = "bootBuildImage";
 
+	static final String BOOT_RUN_TASK_NAME = "bootRun";
+
+	static final String BOOT_TEST_RUN_TASK_NAME = "bootTestRun";
+
 	/**
 	 * The name of the {@code developmentOnly} configuration.
 	 * @since 2.3.0
@@ -77,15 +81,30 @@ public class SpringBootPlugin implements Plugin<Project> {
 	public static final String DEVELOPMENT_ONLY_CONFIGURATION_NAME = "developmentOnly";
 
 	/**
+	 * The name of the {@code testAndDevelopmentOnly} configuration.
+	 * @since 3.2.0
+	 */
+	public static final String TEST_AND_DEVELOPMENT_ONLY_CONFIGURATION_NAME = "testAndDevelopmentOnly";
+
+	/**
 	 * The name of the {@code productionRuntimeClasspath} configuration.
 	 */
 	public static final String PRODUCTION_RUNTIME_CLASSPATH_CONFIGURATION_NAME = "productionRuntimeClasspath";
 
 	/**
-	 * The name of the {@link ResolveMainClassName} task.
+	 * The name of the {@link ResolveMainClassName} task used to resolve a main class from
+	 * the output of the {@code main} source set.
 	 * @since 3.0.0
 	 */
 	public static final String RESOLVE_MAIN_CLASS_NAME_TASK_NAME = "resolveMainClassName";
+
+	/**
+	 * The name of the {@link ResolveMainClassName} task used to resolve a main class from
+	 * the output of the {@code test} source set then, if needed, the output of the
+	 * {@code main} source set.
+	 * @since 3.1.0
+	 */
+	public static final String RESOLVE_TEST_MAIN_CLASS_NAME_TASK_NAME = "resolveTestMainClassName";
 
 	/**
 	 * The coordinates {@code (group:name:version)} of the
@@ -104,8 +123,8 @@ public class SpringBootPlugin implements Plugin<Project> {
 
 	private void verifyGradleVersion() {
 		GradleVersion currentVersion = GradleVersion.current();
-		if (currentVersion.compareTo(GradleVersion.version("7.4")) < 0) {
-			throw new GradleException("Spring Boot plugin requires Gradle 7.x (7.4 or later). "
+		if (currentVersion.compareTo(GradleVersion.version("7.5")) < 0) {
+			throw new GradleException("Spring Boot plugin requires Gradle 7.x (7.5 or later). "
 					+ "The current version is " + currentVersion);
 		}
 	}
@@ -126,7 +145,8 @@ public class SpringBootPlugin implements Plugin<Project> {
 				project.getArtifacts());
 		List<PluginApplicationAction> actions = Arrays.asList(new JavaPluginAction(singlePublishedArtifact),
 				new WarPluginAction(singlePublishedArtifact), new DependencyManagementPluginAction(),
-				new ApplicationPluginAction(), new KotlinPluginAction(), new NativeImagePluginAction());
+				new ApplicationPluginAction(), new KotlinPluginAction(), new NativeImagePluginAction(),
+				new CycloneDxPluginAction());
 		for (PluginApplicationAction action : actions) {
 			withPluginClassOfAction(action,
 					(pluginClass) -> project.getPlugins().withType(pluginClass, (plugin) -> action.execute(project)));

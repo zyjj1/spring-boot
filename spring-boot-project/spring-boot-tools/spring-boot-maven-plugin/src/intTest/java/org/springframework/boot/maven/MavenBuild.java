@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -88,7 +88,7 @@ class MavenBuild {
 
 	private Map<String, String> getPomReplacements() {
 		Map<String, String> replacements = new HashMap<>();
-		replacements.put("java.version", "1.8");
+		replacements.put("java.version", "17");
 		replacements.put("project.groupId", "org.springframework.boot");
 		replacements.put("project.artifactId", "spring-boot-maven-plugin");
 		replacements.putAll(new Versions().asMap());
@@ -130,7 +130,7 @@ class MavenBuild {
 		try {
 			Path destination = this.temp.toPath();
 			Path source = this.projectDir.toPath();
-			Files.walkFileTree(source, new SimpleFileVisitor<Path>() {
+			Files.walkFileTree(source, new SimpleFileVisitor<>() {
 
 				@Override
 				public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
@@ -157,9 +157,8 @@ class MavenBuild {
 
 			});
 			String settingsXml = Files.readString(Paths.get("src", "intTest", "projects", "settings.xml"))
-					.replace("@localCentralUrl@",
-							new File("build/int-test-maven-repository").toURI().toURL().toString())
-					.replace("@localRepositoryPath@", new File("build/local-maven-repository").getAbsolutePath());
+				.replace("@localCentralUrl@", new File("build/int-test-maven-repository").toURI().toURL().toString())
+				.replace("@localRepositoryPath@", new File("build/local-maven-repository").getAbsolutePath());
 			Files.writeString(destination.resolve("settings.xml"), settingsXml, StandardOpenOption.CREATE_NEW);
 			request.setBaseDirectory(this.temp);
 			request.setJavaHome(new File(System.getProperty("java.home")));

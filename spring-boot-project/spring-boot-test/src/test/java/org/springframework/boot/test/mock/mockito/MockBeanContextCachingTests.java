@@ -45,7 +45,7 @@ import static org.mockito.Mockito.mock;
  */
 class MockBeanContextCachingTests {
 
-	private final DefaultContextCache contextCache = new DefaultContextCache();
+	private final DefaultContextCache contextCache = new DefaultContextCache(2);
 
 	private final DefaultCacheAwareContextLoaderDelegate delegate = new DefaultCacheAwareContextLoaderDelegate(
 			this.contextCache);
@@ -54,7 +54,7 @@ class MockBeanContextCachingTests {
 	@SuppressWarnings("unchecked")
 	void clearCache() {
 		Map<MergedContextConfiguration, ApplicationContext> contexts = (Map<MergedContextConfiguration, ApplicationContext>) ReflectionTestUtils
-				.getField(this.contextCache, "contextMap");
+			.getField(this.contextCache, "contextMap");
 		for (ApplicationContext context : contexts.values()) {
 			if (context instanceof ConfigurableApplicationContext configurableContext) {
 				configurableContext.close();

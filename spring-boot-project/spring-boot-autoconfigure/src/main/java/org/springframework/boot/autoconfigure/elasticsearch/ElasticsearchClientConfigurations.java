@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import co.elastic.clients.json.SimpleJsonpMapper;
 import co.elastic.clients.json.jackson.JacksonJsonpMapper;
 import co.elastic.clients.json.jsonb.JsonbJsonpMapper;
 import co.elastic.clients.transport.ElasticsearchTransport;
-import co.elastic.clients.transport.TransportOptions;
+import co.elastic.clients.transport.rest_client.RestClientOptions;
 import co.elastic.clients.transport.rest_client.RestClientTransport;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.json.bind.Jsonb;
@@ -31,6 +31,7 @@ import org.elasticsearch.client.RestClient;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -43,14 +44,20 @@ import org.springframework.context.annotation.Import;
  */
 class ElasticsearchClientConfigurations {
 
+	@Import({ JacksonJsonpMapperConfiguration.class, JsonbJsonpMapperConfiguration.class,
+			SimpleJsonpMapperConfiguration.class })
+	static class JsonpMapperConfiguration {
+
+	}
+
 	@ConditionalOnMissingBean(JsonpMapper.class)
-	@ConditionalOnBean(ObjectMapper.class)
+	@ConditionalOnClass(ObjectMapper.class)
 	@Configuration(proxyBeanMethods = false)
 	static class JacksonJsonpMapperConfiguration {
 
 		@Bean
-		JacksonJsonpMapper jacksonJsonpMapper(ObjectMapper objectMapper) {
-			return new JacksonJsonpMapper(objectMapper);
+		JacksonJsonpMapper jacksonJsonpMapper() {
+			return new JacksonJsonpMapper();
 		}
 
 	}
@@ -78,16 +85,13 @@ class ElasticsearchClientConfigurations {
 
 	}
 
-	@Import({ JacksonJsonpMapperConfiguration.class, JsonbJsonpMapperConfiguration.class,
-			SimpleJsonpMapperConfiguration.class })
-	@ConditionalOnBean(RestClient.class)
 	@ConditionalOnMissingBean(ElasticsearchTransport.class)
 	static class ElasticsearchTransportConfiguration {
 
 		@Bean
 		RestClientTransport restClientTransport(RestClient restClient, JsonpMapper jsonMapper,
-				ObjectProvider<TransportOptions> transportOptions) {
-			return new RestClientTransport(restClient, jsonMapper, transportOptions.getIfAvailable());
+				ObjectProvider<RestClientOptions> restClientOptions) {
+			return new RestClientTransport(restClient, jsonMapper, restClientOptions.getIfAvailable());
 		}
 
 	}

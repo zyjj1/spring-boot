@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ package org.springframework.boot.web.embedded.tomcat;
 import java.io.File;
 import java.io.InputStream;
 import java.lang.reflect.Method;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -38,6 +39,7 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import org.apache.catalina.Context;
 import org.apache.catalina.Engine;
+import org.apache.catalina.Executor;
 import org.apache.catalina.Host;
 import org.apache.catalina.Lifecycle;
 import org.apache.catalina.LifecycleEvent;
@@ -46,6 +48,7 @@ import org.apache.catalina.LifecycleListener;
 import org.apache.catalina.Manager;
 import org.apache.catalina.Valve;
 import org.apache.catalina.WebResource;
+import org.apache.catalina.WebResourceRoot;
 import org.apache.catalina.WebResourceRoot.ResourceSetType;
 import org.apache.catalina.WebResourceSet;
 import org.apache.catalina.Wrapper;
@@ -60,6 +63,8 @@ import org.apache.catalina.util.SessionConfig;
 import org.apache.catalina.webresources.AbstractResourceSet;
 import org.apache.catalina.webresources.EmptyResource;
 import org.apache.catalina.webresources.StandardRoot;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.coyote.AbstractProtocol;
 import org.apache.coyote.ProtocolHandler;
 import org.apache.coyote.http2.Http2Protocol;
@@ -71,6 +76,7 @@ import org.springframework.boot.util.LambdaSafe;
 import org.springframework.boot.web.server.Cookie.SameSite;
 import org.springframework.boot.web.server.ErrorPage;
 import org.springframework.boot.web.server.MimeMappings;
+import org.springframework.boot.web.server.Ssl;
 import org.springframework.boot.web.server.WebServer;
 import org.springframework.boot.web.servlet.ServletContextInitializer;
 import org.springframework.boot.web.servlet.server.AbstractServletWebServerFactory;
@@ -100,6 +106,8 @@ import org.springframework.util.StringUtils;
  * @author Eddú Meléndez
  * @author Christoffer Sawicki
  * @author Dawid Antecki
+ * @author Moritz Halbritter
+ * @author Scott Frederick
  * @since 2.0.0
  * @see #setPort(int)
  * @see #setContextLifecycleListeners(Collection)
@@ -107,6 +115,8 @@ import org.springframework.util.StringUtils;
  */
 public class TomcatServletWebServerFactory extends AbstractServletWebServerFactory
 		implements ConfigurableTomcatWebServerFactory, ResourceLoaderAware {
+
+	private static final Log logger = LogFactory.getLog(TomcatServletWebServerFactory.class);
 
 	private static final Charset DEFAULT_CHARSET = StandardCharsets.UTF_8;
 
@@ -201,13 +211,21 @@ public class TomcatServletWebServerFactory extends AbstractServletWebServerFacto
 		tomcat.getService().addConnector(connector);
 		customizeConnector(connector);
 		tomcat.setConnector(connector);
+		registerConnectorExecutor(tomcat, connector);
 		tomcat.getHost().setAutoDeploy(false);
 		configureEngine(tomcat.getEngine());
 		for (Connector additionalConnector : this.additionalTomcatConnectors) {
 			tomcat.getService().addConnector(additionalConnector);
+			registerConnectorExecutor(tomcat, additionalConnector);
 		}
 		prepareContext(tomcat.getHost(), initializers);
 		return getTomcatWebServer(tomcat);
+	}
+
+	private void registerConnectorExecutor(Tomcat tomcat, Connector connector) {
+		if (connector.getProtocolHandler().getExecutor() instanceof Executor executor) {
+			tomcat.getService().addExecutor(executor);
+		}
 	}
 
 	private void configureEngine(Engine engine) {
@@ -310,8 +328,9 @@ public class TomcatServletWebServerFactory extends AbstractServletWebServerFacto
 	private void addJasperInitializer(TomcatEmbeddedContext context) {
 		try {
 			ServletContainerInitializer initializer = (ServletContainerInitializer) ClassUtils
-					.forName("org.apache.jasper.servlet.JasperInitializer", null).getDeclaredConstructor()
-					.newInstance();
+				.forName("org.apache.jasper.servlet.JasperInitializer", null)
+				.getDeclaredConstructor()
+				.newInstance();
 			context.addServletContainerInitializer(initializer, null);
 		}
 		catch (Exception ex) {
@@ -333,12 +352,10 @@ public class TomcatServletWebServerFactory extends AbstractServletWebServerFacto
 		if (getUriEncoding() != null) {
 			connector.setURIEncoding(getUriEncoding().name());
 		}
-		// Don't bind to the socket prematurely if ApplicationContext is slow to start
-		connector.setProperty("bindOnInit", "false");
 		if (getHttp2() != null && getHttp2().isEnabled()) {
 			connector.addUpgradeProtocol(new Http2Protocol());
 		}
-		if (getSsl() != null && getSsl().isEnabled()) {
+		if (Ssl.isEnabled(getSsl())) {
 			customizeSsl(connector);
 		}
 		TomcatConnectorCustomizer compression = new CompressionConnectorCustomizer(getCompression());
@@ -356,12 +373,25 @@ public class TomcatServletWebServerFactory extends AbstractServletWebServerFacto
 
 	@SuppressWarnings("unchecked")
 	private void invokeProtocolHandlerCustomizers(ProtocolHandler protocolHandler) {
-		LambdaSafe.callbacks(TomcatProtocolHandlerCustomizer.class, this.tomcatProtocolHandlerCustomizers,
-				protocolHandler).invoke((customizer) -> customizer.customize(protocolHandler));
+		LambdaSafe
+			.callbacks(TomcatProtocolHandlerCustomizer.class, this.tomcatProtocolHandlerCustomizers, protocolHandler)
+			.invoke((customizer) -> customizer.customize(protocolHandler));
 	}
 
 	private void customizeSsl(Connector connector) {
-		new SslConnectorCustomizer(getSsl(), getOrCreateSslStoreProvider()).customize(connector);
+		SslConnectorCustomizer customizer = new SslConnectorCustomizer(logger, connector, getSsl().getClientAuth());
+		customizer.customize(getSslBundle(), getServerNameSslBundles());
+		addBundleUpdateHandler(null, getSsl().getBundle(), customizer);
+		getSsl().getServerNameBundles()
+			.forEach((serverNameSslBundle) -> addBundleUpdateHandler(serverNameSslBundle.serverName(),
+					serverNameSslBundle.bundle(), customizer));
+	}
+
+	private void addBundleUpdateHandler(String hostName, String sslBundleName, SslConnectorCustomizer customizer) {
+		if (StringUtils.hasText(sslBundleName)) {
+			getSslBundles().addBundleUpdateHandler(sslBundleName,
+					(sslBundle) -> customizer.update(hostName, sslBundle));
+		}
 	}
 
 	/**
@@ -436,7 +466,7 @@ public class TomcatServletWebServerFactory extends AbstractServletWebServerFacto
 		List<CookieSameSiteSupplier> suppliers = new ArrayList<>();
 		if (sessionSameSite != null) {
 			suppliers.add(CookieSameSiteSupplier.of(sessionSameSite)
-					.whenHasName(() -> SessionConfig.getSessionCookieName(context)));
+				.whenHasName(() -> SessionConfig.getSessionCookieName(context)));
 		}
 		if (!CollectionUtils.isEmpty(getCookieSameSiteSuppliers())) {
 			suppliers.addAll(getCookieSameSiteSuppliers());
@@ -702,7 +732,10 @@ public class TomcatServletWebServerFactory extends AbstractServletWebServerFacto
 	}
 
 	/**
-	 * Add {@link Connector}s in addition to the default connector, e.g. for SSL or AJP
+	 * Add {@link Connector}s in addition to the default connector, e.g. for SSL or AJP.
+	 * <p>
+	 * {@link #getTomcatConnectorCustomizers Connector customizers} are not applied to
+	 * connectors added this way.
 	 * @param connectors the connectors to add
 	 */
 	public void addAdditionalTomcatConnectors(Connector... connectors) {
@@ -752,7 +785,7 @@ public class TomcatServletWebServerFactory extends AbstractServletWebServerFacto
 	 * {@link LifecycleListener} is used so not to interfere with Tomcat's default manager
 	 * creation logic.
 	 */
-	private static class DisablePersistSessionListener implements LifecycleListener {
+	private static final class DisablePersistSessionListener implements LifecycleListener {
 
 		@Override
 		public void lifecycleEvent(LifecycleEvent event) {
@@ -768,6 +801,10 @@ public class TomcatServletWebServerFactory extends AbstractServletWebServerFacto
 	}
 
 	private final class StaticResourceConfigurer implements LifecycleListener {
+
+		private static final String WEB_APP_MOUNT = "/";
+
+		private static final String INTERNAL_PATH = "/META-INF/resources";
 
 		private final Context context;
 
@@ -801,23 +838,39 @@ public class TomcatServletWebServerFactory extends AbstractServletWebServerFacto
 
 		private void addResourceSet(String resource) {
 			try {
-				if (isInsideNestedJar(resource)) {
-					// It's a nested jar but we now don't want the suffix because Tomcat
-					// is going to try and locate it as a root URL (not the resource
-					// inside it)
-					resource = resource.substring(0, resource.length() - 2);
+				if (isInsideClassicNestedJar(resource)) {
+					addClassicNestedResourceSet(resource);
+					return;
 				}
+				WebResourceRoot root = this.context.getResources();
 				URL url = new URL(resource);
-				String path = "/META-INF/resources";
-				this.context.getResources().createWebResourceSet(ResourceSetType.RESOURCE_JAR, "/", url, path);
+				if (isInsideNestedJar(resource)) {
+					root.addJarResources(new NestedJarResourceSet(url, root, WEB_APP_MOUNT, INTERNAL_PATH));
+				}
+				else {
+					root.createWebResourceSet(ResourceSetType.RESOURCE_JAR, WEB_APP_MOUNT, url, INTERNAL_PATH);
+				}
 			}
 			catch (Exception ex) {
 				// Ignore (probably not a directory)
 			}
 		}
 
-		private boolean isInsideNestedJar(String dir) {
-			return dir.indexOf("!/") < dir.lastIndexOf("!/");
+		private void addClassicNestedResourceSet(String resource) throws MalformedURLException {
+			// It's a nested jar but we now don't want the suffix because Tomcat
+			// is going to try and locate it as a root URL (not the resource
+			// inside it)
+			URL url = new URL(resource.substring(0, resource.length() - 2));
+			this.context.getResources()
+				.createWebResourceSet(ResourceSetType.RESOURCE_JAR, WEB_APP_MOUNT, url, INTERNAL_PATH);
+		}
+
+		private boolean isInsideClassicNestedJar(String resource) {
+			return !isInsideNestedJar(resource) && resource.indexOf("!/") < resource.lastIndexOf("!/");
+		}
+
+		private boolean isInsideNestedJar(String resource) {
+			return resource.startsWith("jar:nested:");
 		}
 
 	}
@@ -867,9 +920,10 @@ public class TomcatServletWebServerFactory extends AbstractServletWebServerFacto
 
 		@Override
 		public Set<String> listWebAppPaths(String path) {
-			return this.delegate.listWebAppPaths(path).stream()
-					.filter((webAppPath) -> !webAppPath.startsWith("/org/springframework/boot"))
-					.collect(Collectors.toSet());
+			return this.delegate.listWebAppPaths(path)
+				.stream()
+				.filter((webAppPath) -> !webAppPath.startsWith("/org/springframework/boot"))
+				.collect(Collectors.toSet());
 		}
 
 		@Override

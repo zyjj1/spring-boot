@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -56,11 +56,12 @@ class NoUniqueBeanDefinitionFailureAnalyzer extends AbstractInjectionFailureAnal
 		for (String beanName : beanNames) {
 			buildMessage(message, beanName);
 		}
-		return new FailureAnalysis(message.toString(),
-				"Consider marking one of the beans as @Primary, updating the consumer to"
-						+ " accept multiple beans, or using @Qualifier to identify the"
-						+ " bean that should be consumed",
-				cause);
+		MissingParameterNamesFailureAnalyzer.appendPossibility(message);
+		StringBuilder action = new StringBuilder(
+				"Consider marking one of the beans as @Primary, updating the consumer to accept multiple beans, "
+						+ "or using @Qualifier to identify the bean that should be consumed");
+		action.append("%n%n%s".formatted(MissingParameterNamesFailureAnalyzer.ACTION));
+		return new FailureAnalysis(message.toString(), action.toString(), cause);
 	}
 
 	private void buildMessage(StringBuilder message, String beanName) {
@@ -69,16 +70,21 @@ class NoUniqueBeanDefinitionFailureAnalyzer extends AbstractInjectionFailureAnal
 			message.append(getDefinitionDescription(beanName, definition));
 		}
 		catch (NoSuchBeanDefinitionException ex) {
-			message.append(String.format("\t- %s: a programmatically registered singleton", beanName));
+			message.append(String.format("\t- %s: a programmatically registered singleton%n", beanName));
 		}
 	}
 
 	private String getDefinitionDescription(String beanName, BeanDefinition definition) {
 		if (StringUtils.hasText(definition.getFactoryMethodName())) {
 			return String.format("\t- %s: defined by method '%s' in %s%n", beanName, definition.getFactoryMethodName(),
-					definition.getResourceDescription());
+					getResourceDescription(definition));
 		}
-		return String.format("\t- %s: defined in %s%n", beanName, definition.getResourceDescription());
+		return String.format("\t- %s: defined in %s%n", beanName, getResourceDescription(definition));
+	}
+
+	private String getResourceDescription(BeanDefinition definition) {
+		String resourceDescription = definition.getResourceDescription();
+		return (resourceDescription != null) ? resourceDescription : "unknown location";
 	}
 
 	private String[] extractBeanNames(NoUniqueBeanDefinitionException cause) {

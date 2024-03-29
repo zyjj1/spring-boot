@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 import com.gradle.enterprise.gradleplugin.testretry.TestRetryExtension;
+import com.gradle.enterprise.gradleplugin.testselection.PredictiveTestSelectionExtension;
 import io.spring.javaformat.gradle.SpringJavaFormatPlugin;
 import io.spring.javaformat.gradle.tasks.CheckFormat;
 import io.spring.javaformat.gradle.tasks.Format;
@@ -69,6 +70,9 @@ import org.springframework.util.StringUtils;
  * <li>to use JUnit Platform
  * <li>with a max heap of 1024M
  * <li>to run after any Checkstyle and format checking tasks
+ * <li>to enable retries with a maximum of three attempts when running on CI
+ * <li>to use predictive test selection when the value of the
+ * {@code ENABLE_PREDICTIVE_TEST_SELECTION} environment variable is {@code true}
  * </ul>
  * <li>A {@code testRuntimeOnly} dependency upon
  * {@code org.junit.platform:junit-platform-launcher} is added to projects with the
@@ -121,16 +125,18 @@ class JavaConventions {
 	}
 
 	private void configureJarManifestConventions(Project project) {
-		ExtractResources extractLegalResources = project.getTasks().create("extractLegalResources",
-				ExtractResources.class);
+		ExtractResources extractLegalResources = project.getTasks()
+			.create("extractLegalResources", ExtractResources.class);
 		extractLegalResources.getDestinationDirectory().set(project.getLayout().getBuildDirectory().dir("legal"));
 		extractLegalResources.setResourcesNames(Arrays.asList("LICENSE.txt", "NOTICE.txt"));
 		extractLegalResources.property("version", project.getVersion().toString());
 		SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
-		Set<String> sourceJarTaskNames = sourceSets.stream().map(SourceSet::getSourcesJarTaskName)
-				.collect(Collectors.toSet());
-		Set<String> javadocJarTaskNames = sourceSets.stream().map(SourceSet::getJavadocJarTaskName)
-				.collect(Collectors.toSet());
+		Set<String> sourceJarTaskNames = sourceSets.stream()
+			.map(SourceSet::getSourcesJarTaskName)
+			.collect(Collectors.toSet());
+		Set<String> javadocJarTaskNames = sourceSets.stream()
+			.map(SourceSet::getJavadocJarTaskName)
+			.collect(Collectors.toSet());
 		project.getTasks().withType(Jar.class, (jar) -> project.afterEvaluate((evaluated) -> {
 			jar.metaInf((metaInf) -> metaInf.from(extractLegalResources));
 			jar.manifest((manifest) -> {
@@ -163,16 +169,34 @@ class JavaConventions {
 			test.setMaxHeapSize("1024M");
 			project.getTasks().withType(Checkstyle.class, test::mustRunAfter);
 			project.getTasks().withType(CheckFormat.class, test::mustRunAfter);
-			TestRetryExtension testRetry = test.getExtensions().getByType(TestRetryExtension.class);
-			testRetry.getFailOnPassedAfterRetry().set(true);
-			testRetry.getMaxRetries().set(isCi() ? 3 : 0);
+			configureTestRetries(test);
+			configurePredictiveTestSelection(test);
 		});
-		project.getPlugins().withType(JavaPlugin.class, (javaPlugin) -> project.getDependencies()
+		project.getPlugins()
+			.withType(JavaPlugin.class, (javaPlugin) -> project.getDependencies()
 				.add(JavaPlugin.TEST_RUNTIME_ONLY_CONFIGURATION_NAME, "org.junit.platform:junit-platform-launcher"));
+	}
+
+	private void configureTestRetries(Test test) {
+		TestRetryExtension testRetry = test.getExtensions().getByType(TestRetryExtension.class);
+		testRetry.getFailOnPassedAfterRetry().set(false);
+		testRetry.getMaxRetries().set(isCi() ? 3 : 0);
 	}
 
 	private boolean isCi() {
 		return Boolean.parseBoolean(System.getenv("CI"));
+	}
+
+	private void configurePredictiveTestSelection(Test test) {
+		if (isPredictiveTestSelectionEnabled()) {
+			PredictiveTestSelectionExtension predictiveTestSelection = test.getExtensions()
+				.getByType(PredictiveTestSelectionExtension.class);
+			predictiveTestSelection.getEnabled().convention(true);
+		}
+	}
+
+	private boolean isPredictiveTestSelectionEnabled() {
+		return Boolean.parseBoolean(System.getenv("ENABLE_PREDICTIVE_TEST_SELECTION"));
 	}
 
 	private void configureJavadocConventions(Project project) {
@@ -215,12 +239,14 @@ class JavaConventions {
 		project.getTasks().withType(Format.class, (Format) -> Format.setEncoding("UTF-8"));
 		project.getPlugins().apply(CheckstylePlugin.class);
 		CheckstyleExtension checkstyle = project.getExtensions().getByType(CheckstyleExtension.class);
-		checkstyle.setToolVersion("8.45.1");
+		checkstyle.setToolVersion("10.12.4");
 		checkstyle.getConfigDirectory().set(project.getRootProject().file("src/checkstyle"));
 		String version = SpringJavaFormatPlugin.class.getPackage().getImplementationVersion();
 		DependencySet checkstyleDependencies = project.getConfigurations().getByName("checkstyle").getDependencies();
 		checkstyleDependencies
-				.add(project.getDependencies().create("io.spring.javaformat:spring-javaformat-checkstyle:" + version));
+			.add(project.getDependencies().create("com.puppycrawl.tools:checkstyle:" + checkstyle.getToolVersion()));
+		checkstyleDependencies
+			.add(project.getDependencies().create("io.spring.javaformat:spring-javaformat-checkstyle:" + version));
 	}
 
 	private void configureDependencyManagement(Project project) {
@@ -231,14 +257,18 @@ class JavaConventions {
 			configuration.setCanBeResolved(false);
 		});
 		configurations
-				.matching((configuration) -> configuration.getName().endsWith("Classpath")
-						|| JavaPlugin.ANNOTATION_PROCESSOR_CONFIGURATION_NAME.equals(configuration.getName()))
-				.all((configuration) -> configuration.extendsFrom(dependencyManagement));
-		Dependency springBootParent = project.getDependencies().enforcedPlatform(project.getDependencies()
+			.matching((configuration) -> configuration.getName().endsWith("Classpath")
+					|| JavaPlugin.ANNOTATION_PROCESSOR_CONFIGURATION_NAME.equals(configuration.getName()))
+			.all((configuration) -> configuration.extendsFrom(dependencyManagement));
+		Dependency springBootParent = project.getDependencies()
+			.enforcedPlatform(project.getDependencies()
 				.project(Collections.singletonMap("path", ":spring-boot-project:spring-boot-parent")));
 		dependencyManagement.getDependencies().add(springBootParent);
-		project.getPlugins().withType(OptionalDependenciesPlugin.class, (optionalDependencies) -> configurations
-				.getByName(OptionalDependenciesPlugin.OPTIONAL_CONFIGURATION_NAME).extendsFrom(dependencyManagement));
+		project.getPlugins()
+			.withType(OptionalDependenciesPlugin.class,
+					(optionalDependencies) -> configurations
+						.getByName(OptionalDependenciesPlugin.OPTIONAL_CONFIGURATION_NAME)
+						.extendsFrom(dependencyManagement));
 	}
 
 	private void configureToolchain(Project project) {
@@ -260,9 +290,9 @@ class JavaConventions {
 	}
 
 	private void createProhibitedDependenciesCheck(Configuration classpath, Project project) {
-		CheckClasspathForProhibitedDependencies checkClasspathForProhibitedDependencies = project.getTasks().create(
-				"check" + StringUtils.capitalize(classpath.getName() + "ForProhibitedDependencies"),
-				CheckClasspathForProhibitedDependencies.class);
+		CheckClasspathForProhibitedDependencies checkClasspathForProhibitedDependencies = project.getTasks()
+			.create("check" + StringUtils.capitalize(classpath.getName() + "ForProhibitedDependencies"),
+					CheckClasspathForProhibitedDependencies.class);
 		checkClasspathForProhibitedDependencies.setClasspath(classpath);
 		project.getTasks().getByName(JavaBasePlugin.CHECK_TASK_NAME).dependsOn(checkClasspathForProhibitedDependencies);
 	}

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,15 +42,15 @@ class PathMappedEndpointsTests {
 	@Test
 	void createWhenSupplierIsNullShouldThrowException() {
 		assertThatIllegalArgumentException()
-				.isThrownBy(() -> new PathMappedEndpoints(null, (WebEndpointsSupplier) null))
-				.withMessageContaining("Supplier must not be null");
+			.isThrownBy(() -> new PathMappedEndpoints(null, (WebEndpointsSupplier) null))
+			.withMessageContaining("Supplier must not be null");
 	}
 
 	@Test
 	void createWhenSuppliersIsNullShouldThrowException() {
 		assertThatIllegalArgumentException()
-				.isThrownBy(() -> new PathMappedEndpoints(null, (Collection<EndpointsSupplier<?>>) null))
-				.withMessageContaining("Suppliers must not be null");
+			.isThrownBy(() -> new PathMappedEndpoints(null, (Collection<EndpointsSupplier<?>>) null))
+			.withMessageContaining("Suppliers must not be null");
 	}
 
 	@Test
@@ -89,6 +89,20 @@ class PathMappedEndpointsTests {
 	void getPathWhenMissingIdShouldReturnNull() {
 		PathMappedEndpoints mapped = createTestMapped(null);
 		assertThat(mapped.getPath(EndpointId.of("xx"))).isNull();
+	}
+
+	@Test
+	void getPathWhenBasePathIsRootAndEndpointIsPathMappedToRootShouldReturnSingleSlash() {
+		PathMappedEndpoints mapped = new PathMappedEndpoints("/",
+				() -> List.of(mockEndpoint(EndpointId.of("root"), "/")));
+		assertThat(mapped.getPath(EndpointId.of("root"))).isEqualTo("/");
+	}
+
+	@Test
+	void getPathWhenBasePathIsRootAndEndpointIsPathMapped() {
+		PathMappedEndpoints mapped = new PathMappedEndpoints("/",
+				() -> List.of(mockEndpoint(EndpointId.of("a"), "alpha")));
+		assertThat(mapped.getPath(EndpointId.of("a"))).isEqualTo("/alpha");
 	}
 
 	@Test

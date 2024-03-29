@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,12 +17,13 @@
 package org.springframework.boot.autoconfigure.web.reactive;
 
 import io.undertow.Undertow;
-import org.eclipse.jetty.servlet.ServletHolder;
+import org.eclipse.jetty.ee10.servlet.ServletHolder;
 import reactor.netty.http.server.HttpServer;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.reactor.netty.ReactorNettyConfigurations;
 import org.springframework.boot.web.embedded.jetty.JettyReactiveWebServerFactory;
 import org.springframework.boot.web.embedded.jetty.JettyServerCustomizer;
 import org.springframework.boot.web.embedded.netty.NettyReactiveWebServerFactory;
@@ -37,8 +38,8 @@ import org.springframework.boot.web.embedded.undertow.UndertowReactiveWebServerF
 import org.springframework.boot.web.reactive.server.ReactiveWebServerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.client.reactive.JettyResourceFactory;
-import org.springframework.http.client.reactive.ReactorResourceFactory;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.client.ReactorResourceFactory;
 
 /**
  * Configuration classes for reactive web servers
@@ -55,13 +56,8 @@ abstract class ReactiveWebServerFactoryConfiguration {
 	@Configuration(proxyBeanMethods = false)
 	@ConditionalOnMissingBean(ReactiveWebServerFactory.class)
 	@ConditionalOnClass({ HttpServer.class })
+	@Import(ReactorNettyConfigurations.ReactorResourceFactoryConfiguration.class)
 	static class EmbeddedNetty {
-
-		@Bean
-		@ConditionalOnMissingBean
-		ReactorResourceFactory reactorServerResourceFactory() {
-			return new ReactorResourceFactory();
-		}
 
 		@Bean
 		NettyReactiveWebServerFactory nettyReactiveWebServerFactory(ReactorResourceFactory resourceFactory,
@@ -100,17 +96,10 @@ abstract class ReactiveWebServerFactoryConfiguration {
 	static class EmbeddedJetty {
 
 		@Bean
-		@ConditionalOnMissingBean
-		JettyResourceFactory jettyServerResourceFactory() {
-			return new JettyResourceFactory();
-		}
-
-		@Bean
-		JettyReactiveWebServerFactory jettyReactiveWebServerFactory(JettyResourceFactory resourceFactory,
+		JettyReactiveWebServerFactory jettyReactiveWebServerFactory(
 				ObjectProvider<JettyServerCustomizer> serverCustomizers) {
 			JettyReactiveWebServerFactory serverFactory = new JettyReactiveWebServerFactory();
 			serverFactory.getServerCustomizers().addAll(serverCustomizers.orderedStream().toList());
-			serverFactory.setResourceFactory(resourceFactory);
 			return serverFactory;
 		}
 

@@ -45,6 +45,16 @@ public abstract class AbstractScriptDatabaseInitializerTests<T extends AbstractS
 	}
 
 	@Test
+	void whenDatabaseIsInitializedWithDirectoryLocationsThenFailureIsHelpful() {
+		DatabaseInitializationSettings settings = new DatabaseInitializationSettings();
+		settings.setSchemaLocations(Arrays.asList("/org/springframework/boot/sql/init"));
+		settings.setDataLocations(Arrays.asList("/org/springframework/boot/sql/init"));
+		T initializer = createEmbeddedDatabaseInitializer(settings);
+		assertThatIllegalStateException().isThrownBy(initializer::initializeDatabase)
+			.withMessage("No schema scripts found at location '/org/springframework/boot/sql/init'");
+	}
+
+	@Test
 	void whenContinueOnErrorIsFalseThenInitializationFailsOnError() {
 		DatabaseInitializationSettings settings = new DatabaseInitializationSettings();
 		settings.setDataLocations(Arrays.asList("data.sql"));
@@ -69,7 +79,7 @@ public abstract class AbstractScriptDatabaseInitializerTests<T extends AbstractS
 		settings.setSchemaLocations(Arrays.asList("does-not-exist.sql"));
 		T initializer = createEmbeddedDatabaseInitializer(settings);
 		assertThatIllegalStateException().isThrownBy(initializer::initializeDatabase)
-				.withMessage("No schema scripts found at location 'does-not-exist.sql'");
+			.withMessage("No schema scripts found at location 'does-not-exist.sql'");
 		assertThatDatabaseWasNotAccessed(initializer);
 	}
 
@@ -79,7 +89,7 @@ public abstract class AbstractScriptDatabaseInitializerTests<T extends AbstractS
 		settings.setDataLocations(Arrays.asList("does-not-exist.sql"));
 		T initializer = createEmbeddedDatabaseInitializer(settings);
 		assertThatIllegalStateException().isThrownBy(initializer::initializeDatabase)
-				.withMessage("No data scripts found at location 'does-not-exist.sql'");
+			.withMessage("No data scripts found at location 'does-not-exist.sql'");
 		assertThatDatabaseWasNotAccessed(initializer);
 	}
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
  */
 
 package org.springframework.boot.autoconfigure.flyway;
-
-import java.lang.reflect.Executable;
 
 import javax.lang.model.element.Modifier;
 
@@ -42,7 +40,7 @@ class ResourceProviderCustomizerBeanRegistrationAotProcessor implements BeanRegi
 	public BeanRegistrationAotContribution processAheadOfTime(RegisteredBean registeredBean) {
 		if (registeredBean.getBeanClass().equals(ResourceProviderCustomizer.class)) {
 			return BeanRegistrationAotContribution
-					.withCustomCodeFragments((codeFragments) -> new AotContribution(codeFragments, registeredBean));
+				.withCustomCodeFragments((codeFragments) -> new AotContribution(codeFragments, registeredBean));
 		}
 		return null;
 	}
@@ -58,8 +56,7 @@ class ResourceProviderCustomizerBeanRegistrationAotProcessor implements BeanRegi
 
 		@Override
 		public CodeBlock generateInstanceSupplierCode(GenerationContext generationContext,
-				BeanRegistrationCode beanRegistrationCode, Executable constructorOrFactoryMethod,
-				boolean allowDirectSupplierShortcut) {
+				BeanRegistrationCode beanRegistrationCode, boolean allowDirectSupplierShortcut) {
 			GeneratedMethod generatedMethod = beanRegistrationCode.getMethods().add("getInstance", (method) -> {
 				method.addJavadoc("Get the bean instance for '$L'.", this.registeredBean.getBeanName());
 				method.addModifiers(Modifier.PRIVATE, Modifier.STATIC);

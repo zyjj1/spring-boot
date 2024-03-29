@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,11 +28,13 @@ import org.springframework.boot.actuate.info.Info;
 import org.springframework.boot.actuate.info.InfoContributor;
 import org.springframework.boot.actuate.info.JavaInfoContributor;
 import org.springframework.boot.actuate.info.OsInfoContributor;
+import org.springframework.boot.actuate.info.ProcessInfoContributor;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.info.BuildProperties;
 import org.springframework.boot.info.GitProperties;
 import org.springframework.boot.info.JavaInfo;
 import org.springframework.boot.info.OsInfo;
+import org.springframework.boot.info.ProcessInfo;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -48,12 +50,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 class InfoContributorAutoConfigurationTests {
 
 	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-			.withConfiguration(AutoConfigurations.of(InfoContributorAutoConfiguration.class));
+		.withConfiguration(AutoConfigurations.of(InfoContributorAutoConfiguration.class));
 
 	@Test
 	void envContributor() {
 		this.contextRunner.withPropertyValues("management.info.env.enabled=true")
-				.run((context) -> assertThat(context).hasSingleBean(EnvironmentInfoContributor.class));
+			.run((context) -> assertThat(context).hasSingleBean(EnvironmentInfoContributor.class));
 	}
 
 	@Test
@@ -64,16 +66,16 @@ class InfoContributorAutoConfigurationTests {
 	@Test
 	void defaultInfoContributorsEnabledWithPrerequisitesInPlace() {
 		this.contextRunner.withUserConfiguration(GitPropertiesConfiguration.class, BuildPropertiesConfiguration.class)
-				.run((context) -> assertThat(context.getBeansOfType(InfoContributor.class)).hasSize(2)
-						.satisfies((contributors) -> assertThat(contributors.values())
-								.hasOnlyElementsOfTypes(BuildInfoContributor.class, GitInfoContributor.class)));
+			.run((context) -> assertThat(context.getBeansOfType(InfoContributor.class)).hasSize(2)
+				.satisfies((contributors) -> assertThat(contributors.values())
+					.hasOnlyElementsOfTypes(BuildInfoContributor.class, GitInfoContributor.class)));
 	}
 
 	@Test
 	void defaultInfoContributorsDisabledWithPrerequisitesInPlace() {
 		this.contextRunner.withUserConfiguration(GitPropertiesConfiguration.class, BuildPropertiesConfiguration.class)
-				.withPropertyValues("management.info.defaults.enabled=false")
-				.run((context) -> assertThat(context).doesNotHaveBean(InfoContributor.class));
+			.withPropertyValues("management.info.defaults.enabled=false")
+			.run((context) -> assertThat(context).doesNotHaveBean(InfoContributor.class));
 	}
 
 	@Test
@@ -101,15 +103,16 @@ class InfoContributorAutoConfigurationTests {
 	@Test
 	void gitPropertiesFullMode() {
 		this.contextRunner.withPropertyValues("management.info.git.mode=full")
-				.withUserConfiguration(GitPropertiesConfiguration.class).run((context) -> {
-					assertThat(context).hasSingleBean(GitInfoContributor.class);
-					Map<String, Object> content = invokeContributor(context.getBean(GitInfoContributor.class));
-					Object git = content.get("git");
-					assertThat(git).isInstanceOf(Map.class);
-					Map<String, Object> gitInfo = (Map<String, Object>) git;
-					assertThat(gitInfo).containsOnlyKeys("branch", "commit", "foo");
-					assertThat(gitInfo).containsEntry("foo", "bar");
-				});
+			.withUserConfiguration(GitPropertiesConfiguration.class)
+			.run((context) -> {
+				assertThat(context).hasSingleBean(GitInfoContributor.class);
+				Map<String, Object> content = invokeContributor(context.getBean(GitInfoContributor.class));
+				Object git = content.get("git");
+				assertThat(git).isInstanceOf(Map.class);
+				Map<String, Object> gitInfo = (Map<String, Object>) git;
+				assertThat(gitInfo).containsOnlyKeys("branch", "commit", "foo");
+				assertThat(gitInfo).containsEntry("foo", "bar");
+			});
 	}
 
 	@Test
@@ -139,7 +142,7 @@ class InfoContributorAutoConfigurationTests {
 		this.contextRunner.withUserConfiguration(CustomBuildInfoContributorConfiguration.class).run((context) -> {
 			assertThat(context).hasSingleBean(BuildInfoContributor.class);
 			assertThat(context.getBean(BuildInfoContributor.class))
-					.isSameAs(context.getBean("customBuildInfoContributor"));
+				.isSameAs(context.getBean("customBuildInfoContributor"));
 		});
 	}
 
@@ -160,6 +163,16 @@ class InfoContributorAutoConfigurationTests {
 			Map<String, Object> content = invokeContributor(context.getBean(OsInfoContributor.class));
 			assertThat(content).containsKey("os");
 			assertThat(content.get("os")).isInstanceOf(OsInfo.class);
+		});
+	}
+
+	@Test
+	void processInfoContributor() {
+		this.contextRunner.withPropertyValues("management.info.process.enabled=true").run((context) -> {
+			assertThat(context).hasSingleBean(ProcessInfoContributor.class);
+			Map<String, Object> content = invokeContributor(context.getBean(ProcessInfoContributor.class));
+			assertThat(content).containsKey("process");
+			assertThat(content.get("process")).isInstanceOf(ProcessInfo.class);
 		});
 	}
 

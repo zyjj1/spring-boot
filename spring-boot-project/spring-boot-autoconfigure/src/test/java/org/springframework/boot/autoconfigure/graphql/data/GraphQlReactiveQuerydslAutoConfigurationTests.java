@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import reactor.core.publisher.Mono;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.graphql.Book;
 import org.springframework.boot.autoconfigure.graphql.GraphQlAutoConfiguration;
+import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.ReactiveWebApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -32,6 +33,7 @@ import org.springframework.graphql.data.GraphQlRepository;
 import org.springframework.graphql.test.tester.ExecutionGraphQlServiceTester;
 import org.springframework.graphql.test.tester.GraphQlTester;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
@@ -46,19 +48,29 @@ class GraphQlReactiveQuerydslAutoConfigurationTests {
 	private static final Mono<Book> bookPublisher = Mono.just(new Book("42", "Test title", 42, "Test Author"));
 
 	private final ReactiveWebApplicationContextRunner contextRunner = new ReactiveWebApplicationContextRunner()
-			.withConfiguration(AutoConfigurations.of(GraphQlAutoConfiguration.class,
-					GraphQlReactiveQuerydslAutoConfiguration.class))
-			.withUserConfiguration(MockRepositoryConfig.class)
-			.withPropertyValues("spring.main.web-application-type=reactive");
+		.withConfiguration(
+				AutoConfigurations.of(GraphQlAutoConfiguration.class, GraphQlReactiveQuerydslAutoConfiguration.class))
+		.withUserConfiguration(MockRepositoryConfig.class)
+		.withPropertyValues("spring.main.web-application-type=reactive");
 
 	@Test
 	void shouldRegisterDataFetcherForQueryDslRepositories() {
 		this.contextRunner.run((context) -> {
 			ExecutionGraphQlService graphQlService = context.getBean(ExecutionGraphQlService.class);
 			GraphQlTester graphQlTester = ExecutionGraphQlServiceTester.create(graphQlService);
-			graphQlTester.document("{ bookById(id: 1) {name}}").execute().path("bookById.name").entity(String.class)
-					.isEqualTo("Test title");
+			graphQlTester.document("{ bookById(id: 1) {name}}")
+				.execute()
+				.path("bookById.name")
+				.entity(String.class)
+				.isEqualTo("Test title");
 		});
+	}
+
+	@Test
+	void shouldBackOffWithoutQueryDsl() {
+		this.contextRunner.withClassLoader(new FilteredClassLoader("com.querydsl.core"))
+			.run((context) -> assertThat(context).doesNotHaveBean("querydslRegistrar")
+				.doesNotHaveBean(GraphQlReactiveQuerydslAutoConfiguration.class));
 	}
 
 	@Configuration(proxyBeanMethods = false)

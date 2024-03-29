@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,12 +26,14 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.beans.factory.BeanCreationException;
+import org.springframework.boot.ApplicationContextFactory;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.test.context.SpringBootTest.UseMainMethod;
 import org.springframework.boot.test.util.TestPropertyValues;
 import org.springframework.boot.web.reactive.context.GenericReactiveWebApplicationContext;
 import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.ConfigurableEnvironment;
@@ -142,7 +144,7 @@ class SpringBootContextLoaderTests {
 	@Test
 	void testPropertyValuesShouldTakePrecedenceWhenInlinedPropertiesPresentAndProfilesActive() {
 		TestContext context = new ExposedTestContextManager(ActiveProfileWithInlinedProperties.class)
-				.getExposedTestContext();
+			.getExposedTestContext();
 		StandardEnvironment environment = (StandardEnvironment) context.getApplicationContext().getEnvironment();
 		TestPropertyValues.of("key=thisValue").applyTo(environment);
 		assertThat(environment.getProperty("key")).isEqualTo("thisValue");
@@ -153,9 +155,11 @@ class SpringBootContextLoaderTests {
 	void propertySourceOrdering() {
 		TestContext context = new ExposedTestContextManager(PropertySourceOrdering.class).getExposedTestContext();
 		ConfigurableEnvironment environment = (ConfigurableEnvironment) context.getApplicationContext()
-				.getEnvironment();
-		List<String> names = environment.getPropertySources().stream().map(PropertySource::getName)
-				.collect(Collectors.toCollection(ArrayList::new));
+			.getEnvironment();
+		List<String> names = environment.getPropertySources()
+			.stream()
+			.map(PropertySource::getName)
+			.collect(Collectors.toCollection(ArrayList::new));
 		String last = names.remove(names.size() - 1);
 		assertThat(names).containsExactly("configurationProperties", "Inlined Test Properties", "commandLineArgs",
 				"servletConfigInitParams", "servletContextInitParams", "systemProperties", "systemEnvironment",
@@ -166,29 +170,30 @@ class SpringBootContextLoaderTests {
 	@Test
 	void whenEnvironmentChangesWebApplicationTypeToNoneThenContextTypeChangesAccordingly() {
 		TestContext context = new ExposedTestContextManager(ChangingWebApplicationTypeToNone.class)
-				.getExposedTestContext();
+			.getExposedTestContext();
 		assertThat(context.getApplicationContext()).isNotInstanceOf(WebApplicationContext.class);
 	}
 
 	@Test
 	void whenEnvironmentChangesWebApplicationTypeToReactiveThenContextTypeChangesAccordingly() {
 		TestContext context = new ExposedTestContextManager(ChangingWebApplicationTypeToReactive.class)
-				.getExposedTestContext();
+			.getExposedTestContext();
 		assertThat(context.getApplicationContext()).isInstanceOf(GenericReactiveWebApplicationContext.class);
 	}
 
 	@Test
 	void whenUseMainMethodAlwaysAndMainMethodThrowsException() {
 		TestContext testContext = new ExposedTestContextManager(UseMainMethodAlwaysAndMainMethodThrowsException.class)
-				.getExposedTestContext();
-		assertThatIllegalStateException().isThrownBy(testContext::getApplicationContext).havingCause()
-				.withMessageContaining("ThrownFromMain");
+			.getExposedTestContext();
+		assertThatIllegalStateException().isThrownBy(testContext::getApplicationContext)
+			.havingCause()
+			.withMessageContaining("ThrownFromMain");
 	}
 
 	@Test
 	void whenUseMainMethodWhenAvailableAndNoMainMethod() {
 		TestContext testContext = new ExposedTestContextManager(UseMainMethodWhenAvailableAndNoMainMethod.class)
-				.getExposedTestContext();
+			.getExposedTestContext();
 		ApplicationContext applicationContext = testContext.getApplicationContext();
 		assertThat(applicationContext.getEnvironment().getActiveProfiles()).isEmpty();
 	}
@@ -196,7 +201,7 @@ class SpringBootContextLoaderTests {
 	@Test
 	void whenUseMainMethodWhenAvailableAndMainMethod() {
 		TestContext testContext = new ExposedTestContextManager(UseMainMethodWhenAvailableAndMainMethod.class)
-				.getExposedTestContext();
+			.getExposedTestContext();
 		ApplicationContext applicationContext = testContext.getApplicationContext();
 		assertThat(applicationContext.getEnvironment().getActiveProfiles()).contains("frommain");
 	}
@@ -211,35 +216,43 @@ class SpringBootContextLoaderTests {
 	@Test
 	void whenUseMainMethodWithBeanThrowingException() {
 		TestContext testContext = new ExposedTestContextManager(UseMainMethodWithBeanThrowingException.class)
-				.getExposedTestContext();
-		assertThatIllegalStateException().isThrownBy(testContext::getApplicationContext).havingCause()
-				.satisfies((exception) -> {
-					assertThat(exception).isInstanceOf(BeanCreationException.class);
-					assertThat(exception)
-							.isSameAs(ContextLoaderApplicationContextFailureProcessor.contextLoadException);
-				});
+			.getExposedTestContext();
+		assertThatIllegalStateException().isThrownBy(testContext::getApplicationContext)
+			.havingCause()
+			.satisfies((exception) -> {
+				assertThat(exception).isInstanceOf(BeanCreationException.class);
+				assertThat(exception).isSameAs(ContextLoaderApplicationContextFailureProcessor.contextLoadException);
+			});
 		assertThat(ContextLoaderApplicationContextFailureProcessor.failedContext).isNotNull();
 	}
 
 	@Test
 	void whenNoMainMethodWithBeanThrowingException() {
 		TestContext testContext = new ExposedTestContextManager(NoMainMethodWithBeanThrowingException.class)
-				.getExposedTestContext();
-		assertThatIllegalStateException().isThrownBy(testContext::getApplicationContext).havingCause()
-				.satisfies((exception) -> {
-					assertThat(exception).isInstanceOf(BeanCreationException.class);
-					assertThat(exception)
-							.isSameAs(ContextLoaderApplicationContextFailureProcessor.contextLoadException);
-				});
+			.getExposedTestContext();
+		assertThatIllegalStateException().isThrownBy(testContext::getApplicationContext)
+			.havingCause()
+			.satisfies((exception) -> {
+				assertThat(exception).isInstanceOf(BeanCreationException.class);
+				assertThat(exception).isSameAs(ContextLoaderApplicationContextFailureProcessor.contextLoadException);
+			});
 		assertThat(ContextLoaderApplicationContextFailureProcessor.failedContext).isNotNull();
 	}
 
 	@Test
 	void whenUseMainMethodWithContextHierarchyThrowsException() {
 		TestContext testContext = new ExposedTestContextManager(UseMainMethodWithContextHierarchy.class)
-				.getExposedTestContext();
-		assertThatIllegalStateException().isThrownBy(testContext::getApplicationContext).havingCause()
-				.withMessage("UseMainMethod.ALWAYS cannot be used with @ContextHierarchy tests");
+			.getExposedTestContext();
+		assertThatIllegalStateException().isThrownBy(testContext::getApplicationContext)
+			.havingCause()
+			.withMessage("UseMainMethod.ALWAYS cannot be used with @ContextHierarchy tests");
+	}
+
+	@Test
+	void whenSubclassProvidesCustomApplicationContextFactory() {
+		TestContext testContext = new ExposedTestContextManager(CustomApplicationContextTest.class)
+			.getExposedTestContext();
+		assertThat(testContext.getApplicationContext()).isInstanceOf(CustomAnnotationConfigApplicationContext.class);
 	}
 
 	private String[] getActiveProfiles(Class<?> testClass) {
@@ -251,7 +264,7 @@ class SpringBootContextLoaderTests {
 	private Map<String, Object> getMergedContextConfigurationProperties(Class<?> testClass) {
 		TestContext context = new ExposedTestContextManager(testClass).getExposedTestContext();
 		MergedContextConfiguration config = (MergedContextConfiguration) ReflectionTestUtils.getField(context,
-				"mergedContextConfiguration");
+				"mergedConfig");
 		return TestPropertySourceUtils.convertInlinedPropertiesToMap(config.getPropertySourceProperties());
 	}
 
@@ -366,6 +379,25 @@ class SpringBootContextLoaderTests {
 
 	}
 
+	@SpringBootTest
+	@ContextConfiguration(classes = Config.class, loader = CustomApplicationContextSpringBootContextLoader.class)
+	static class CustomApplicationContextTest {
+
+	}
+
+	static class CustomApplicationContextSpringBootContextLoader extends SpringBootContextLoader {
+
+		@Override
+		protected ApplicationContextFactory getApplicationContextFactory(MergedContextConfiguration mergedConfig) {
+			return (webApplicationType) -> new CustomAnnotationConfigApplicationContext();
+		}
+
+	}
+
+	static class CustomAnnotationConfigApplicationContext extends AnnotationConfigApplicationContext {
+
+	}
+
 	@Configuration(proxyBeanMethods = false)
 	static class Config {
 
@@ -442,7 +474,8 @@ class SpringBootContextLoaderTests {
 
 	}
 
-	private static class ContextLoaderApplicationContextFailureProcessor implements ApplicationContextFailureProcessor {
+	private static final class ContextLoaderApplicationContextFailureProcessor
+			implements ApplicationContextFailureProcessor {
 
 		static ApplicationContext failedContext;
 

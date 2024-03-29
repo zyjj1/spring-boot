@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,6 +49,7 @@ import org.springframework.boot.configurationprocessor.metadata.ItemDeprecation;
  * Provide utilities to detect and validate configuration properties.
  *
  * @author Stephane Nicoll
+ * @author Scott Frederick
  */
 class MetadataGenerationEnvironment {
 
@@ -174,14 +175,13 @@ class MetadataGenerationEnvironment {
 		AnnotationMirror annotation = getAnnotation(element, this.deprecatedConfigurationPropertyAnnotation);
 		String reason = null;
 		String replacement = null;
+		String since = null;
 		if (annotation != null) {
-			Map<String, Object> elementValues = getAnnotationElementValues(annotation);
-			reason = (String) elementValues.get("reason");
-			replacement = (String) elementValues.get("replacement");
+			reason = getAnnotationElementStringValue(annotation, "reason");
+			replacement = getAnnotationElementStringValue(annotation, "replacement");
+			since = getAnnotationElementStringValue(annotation, "since");
 		}
-		reason = (reason == null || reason.isEmpty()) ? null : reason;
-		replacement = (replacement == null || replacement.isEmpty()) ? null : replacement;
-		return new ItemDeprecation(reason, replacement);
+		return new ItemDeprecation(reason, replacement, since);
 	}
 
 	boolean hasConstructorBindingAnnotation(ExecutableElement element) {
@@ -275,8 +275,18 @@ class MetadataGenerationEnvironment {
 	Map<String, Object> getAnnotationElementValues(AnnotationMirror annotation) {
 		Map<String, Object> values = new LinkedHashMap<>();
 		annotation.getElementValues()
-				.forEach((name, value) -> values.put(name.getSimpleName().toString(), getAnnotationValue(value)));
+			.forEach((name, value) -> values.put(name.getSimpleName().toString(), getAnnotationValue(value)));
 		return values;
+	}
+
+	String getAnnotationElementStringValue(AnnotationMirror annotation, String name) {
+		return annotation.getElementValues()
+			.entrySet()
+			.stream()
+			.filter((element) -> element.getKey().getSimpleName().toString().equals(name))
+			.map((element) -> asString(getAnnotationValue(element.getValue())))
+			.findFirst()
+			.orElse(null);
 	}
 
 	private Object getAnnotationValue(AnnotationValue annotationValue) {
@@ -287,6 +297,10 @@ class MetadataGenerationEnvironment {
 			return values;
 		}
 		return value;
+	}
+
+	private String asString(Object value) {
+		return (value == null || value.toString().isEmpty()) ? null : (String) value;
 	}
 
 	TypeElement getConfigurationPropertiesAnnotationElement() {
@@ -306,8 +320,10 @@ class MetadataGenerationEnvironment {
 	}
 
 	Set<TypeElement> getEndpointAnnotationElements() {
-		return this.endpointAnnotations.stream().map(this.elements::getTypeElement).filter(Objects::nonNull)
-				.collect(Collectors.toSet());
+		return this.endpointAnnotations.stream()
+			.map(this.elements::getTypeElement)
+			.filter(Objects::nonNull)
+			.collect(Collectors.toSet());
 	}
 
 	AnnotationMirror getReadOperationAnnotation(Element element) {

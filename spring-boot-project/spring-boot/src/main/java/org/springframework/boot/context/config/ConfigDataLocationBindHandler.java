@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,29 +39,22 @@ import org.springframework.boot.origin.Origin;
 class ConfigDataLocationBindHandler extends AbstractBindHandler {
 
 	@Override
-	@SuppressWarnings("unchecked")
 	public Object onSuccess(ConfigurationPropertyName name, Bindable<?> target, BindContext context, Object result) {
 		if (result instanceof ConfigDataLocation location) {
 			return withOrigin(context, location);
 		}
-		if (result instanceof List) {
-			List<Object> list = ((List<Object>) result).stream().filter(Objects::nonNull)
-					.collect(Collectors.toCollection(ArrayList::new));
-			for (int i = 0; i < list.size(); i++) {
-				Object element = list.get(i);
-				if (element instanceof ConfigDataLocation location) {
-					list.set(i, withOrigin(context, location));
-				}
-			}
-			return list;
+		if (result instanceof List<?> list) {
+			return list.stream()
+				.filter(Objects::nonNull)
+				.map((element) -> (element instanceof ConfigDataLocation location) ? withOrigin(context, location)
+						: element)
+				.collect(Collectors.toCollection(ArrayList::new));
 		}
 		if (result instanceof ConfigDataLocation[] unfilteredLocations) {
-			ConfigDataLocation[] locations = Arrays.stream(unfilteredLocations).filter(Objects::nonNull)
-					.toArray(ConfigDataLocation[]::new);
-			for (int i = 0; i < locations.length; i++) {
-				locations[i] = withOrigin(context, locations[i]);
-			}
-			return locations;
+			return Arrays.stream(unfilteredLocations)
+				.filter(Objects::nonNull)
+				.map((element) -> withOrigin(context, element))
+				.toArray(ConfigDataLocation[]::new);
 		}
 		return result;
 	}

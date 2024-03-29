@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 
 package org.springframework.boot.jackson;
 
-import java.lang.reflect.Executable;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -33,6 +32,7 @@ import org.springframework.beans.factory.aot.BeanRegistrationCode;
 import org.springframework.beans.factory.aot.BeanRegistrationCodeFragments;
 import org.springframework.beans.factory.aot.BeanRegistrationCodeFragmentsDecorator;
 import org.springframework.beans.factory.support.RegisteredBean;
+import org.springframework.javapoet.ClassName;
 import org.springframework.javapoet.CodeBlock;
 
 /**
@@ -47,12 +47,14 @@ class JsonMixinModuleEntriesBeanRegistrationAotProcessor implements BeanRegistra
 	public BeanRegistrationAotContribution processAheadOfTime(RegisteredBean registeredBean) {
 		if (registeredBean.getBeanClass().equals(JsonMixinModuleEntries.class)) {
 			return BeanRegistrationAotContribution
-					.withCustomCodeFragments((codeFragments) -> new AotContribution(codeFragments, registeredBean));
+				.withCustomCodeFragments((codeFragments) -> new AotContribution(codeFragments, registeredBean));
 		}
 		return null;
 	}
 
 	static class AotContribution extends BeanRegistrationCodeFragmentsDecorator {
+
+		private static final Class<?> BEAN_TYPE = JsonMixinModuleEntries.class;
 
 		private final RegisteredBean registeredBean;
 
@@ -65,17 +67,20 @@ class JsonMixinModuleEntriesBeanRegistrationAotProcessor implements BeanRegistra
 		}
 
 		@Override
+		public ClassName getTarget(RegisteredBean registeredBean) {
+			return ClassName.get(BEAN_TYPE);
+		}
+
+		@Override
 		public CodeBlock generateInstanceSupplierCode(GenerationContext generationContext,
-				BeanRegistrationCode beanRegistrationCode, Executable constructorOrFactoryMethod,
-				boolean allowDirectSupplierShortcut) {
+				BeanRegistrationCode beanRegistrationCode, boolean allowDirectSupplierShortcut) {
 			JsonMixinModuleEntries entries = this.registeredBean.getBeanFactory()
-					.getBean(this.registeredBean.getBeanName(), JsonMixinModuleEntries.class);
+				.getBean(this.registeredBean.getBeanName(), JsonMixinModuleEntries.class);
 			contributeHints(generationContext.getRuntimeHints(), entries);
 			GeneratedMethod generatedMethod = beanRegistrationCode.getMethods().add("getInstance", (method) -> {
-				Class<?> beanType = JsonMixinModuleEntries.class;
 				method.addJavadoc("Get the bean instance for '$L'.", this.registeredBean.getBeanName());
 				method.addModifiers(Modifier.PRIVATE, Modifier.STATIC);
-				method.returns(beanType);
+				method.returns(BEAN_TYPE);
 				CodeBlock.Builder code = CodeBlock.builder();
 				code.add("return $T.create(", JsonMixinModuleEntries.class).beginControlFlow("(mixins) ->");
 				entries.doWithEntry(this.classLoader, (type, mixin) -> addEntryCode(code, type, mixin));

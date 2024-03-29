@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package org.springframework.boot.diagnostics.analyzer;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -70,23 +71,25 @@ class MutuallyExclusiveConfigurationPropertiesFailureAnalyzer
 
 	private List<Descriptor> getDescriptors(String propertyName) {
 		return getPropertySources().filter((source) -> source.containsProperty(propertyName))
-				.map((source) -> Descriptor.get(source, propertyName)).toList();
+			.map((source) -> Descriptor.get(source, propertyName))
+			.toList();
 	}
 
 	private Stream<PropertySource<?>> getPropertySources() {
 		if (this.environment == null) {
 			return Stream.empty();
 		}
-		return this.environment.getPropertySources().stream()
-				.filter((source) -> !ConfigurationPropertySources.isAttachedConfigurationPropertySource(source));
+		return this.environment.getPropertySources()
+			.stream()
+			.filter((source) -> !ConfigurationPropertySources.isAttachedConfigurationPropertySource(source));
 	}
 
 	private void appendDetails(StringBuilder message, MutuallyExclusiveConfigurationPropertiesException cause,
 			List<Descriptor> descriptors) {
-		descriptors.sort((d1, d2) -> d1.propertyName.compareTo(d2.propertyName));
+		descriptors.sort(Comparator.comparing((descriptor) -> descriptor.propertyName));
 		message.append(String.format("The following configuration properties are mutually exclusive:%n%n"));
 		sortedStrings(cause.getMutuallyExclusiveNames())
-				.forEach((name) -> message.append(String.format("\t%s%n", name)));
+			.forEach((name) -> message.append(String.format("\t%s%n", name)));
 		message.append(String.format("%n"));
 		message.append(
 				String.format("However, more than one of those properties has been configured at the same time:%n%n"));
@@ -96,7 +99,7 @@ class MutuallyExclusiveConfigurationPropertiesFailureAnalyzer
 		configuredDescriptions.forEach(message::append);
 	}
 
-	private <S> Set<String> sortedStrings(Collection<String> input) {
+	private Set<String> sortedStrings(Collection<String> input) {
 		return sortedStrings(input, Function.identity());
 	}
 

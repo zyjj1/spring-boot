@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -250,8 +250,9 @@ public final class EndpointRequest {
 
 		private List<RequestMatcher> getDelegateMatchers(RequestMatcherFactory requestMatcherFactory,
 				RequestMatcherProvider matcherProvider, Set<String> paths) {
-			return paths.stream().map((path) -> requestMatcherFactory.antPath(matcherProvider, path, "/**"))
-					.collect(Collectors.toCollection(ArrayList::new));
+			return paths.stream()
+				.map((path) -> requestMatcherFactory.antPath(matcherProvider, path, "/**"))
+				.collect(Collectors.toCollection(ArrayList::new));
 		}
 
 		@Override
@@ -261,8 +262,10 @@ public final class EndpointRequest {
 		}
 
 		private String toString(List<Object> endpoints, String emptyValue) {
-			return (!endpoints.isEmpty()) ? endpoints.stream().map(this::getEndpointId).map(Object::toString)
-					.collect(Collectors.joining(", ", "[", "]")) : emptyValue;
+			return (!endpoints.isEmpty()) ? endpoints.stream()
+				.map(this::getEndpointId)
+				.map(Object::toString)
+				.collect(Collectors.joining(", ", "[", "]")) : emptyValue;
 		}
 
 		private EndpointId getEndpointId(Object source) {
@@ -308,7 +311,7 @@ public final class EndpointRequest {
 	/**
 	 * Factory used to create a {@link RequestMatcher}.
 	 */
-	private static class RequestMatcherFactory {
+	private static final class RequestMatcherFactory {
 
 		RequestMatcher antPath(RequestMatcherProvider matcherProvider, String... parts) {
 			StringBuilder pattern = new StringBuilder();

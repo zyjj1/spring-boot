@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -57,7 +57,7 @@ class ConfigurationPropertiesBeanRegistrationAotProcessorTests {
 	@Test
 	void configurationPropertiesBeanRegistrationAotProcessorIsRegistered() {
 		assertThat(AotServices.factories().load(BeanRegistrationAotProcessor.class))
-				.anyMatch(ConfigurationPropertiesBeanRegistrationAotProcessor.class::isInstance);
+			.anyMatch(ConfigurationPropertiesBeanRegistrationAotProcessor.class::isInstance);
 	}
 
 	@Test
@@ -65,7 +65,7 @@ class ConfigurationPropertiesBeanRegistrationAotProcessorTests {
 		RootBeanDefinition beanDefinition = new RootBeanDefinition(String.class);
 		this.beanFactory.registerBeanDefinition("test", beanDefinition);
 		BeanRegistrationAotContribution contribution = this.processor
-				.processAheadOfTime(RegisteredBean.of(this.beanFactory, "test"));
+			.processAheadOfTime(RegisteredBean.of(this.beanFactory, "test"));
 		assertThat(contribution).isNull();
 	}
 
@@ -102,8 +102,22 @@ class ConfigurationPropertiesBeanRegistrationAotProcessorTests {
 
 	@Test
 	@CompileWithForkedClassLoader
+	void aotContributedInitializerBindsValueObjectWithSpecificConstructor() {
+		compile(createContext(ValueObjectSampleBeanWithSpecificConstructorConfiguration.class), (freshContext) -> {
+			TestPropertySourceUtils.addInlinedPropertiesToEnvironment(freshContext, "test.name=Hello",
+					"test.counter=30");
+			freshContext.refresh();
+			ValueObjectWithSpecificConstructorSampleBean bean = freshContext
+				.getBean(ValueObjectWithSpecificConstructorSampleBean.class);
+			assertThat(bean.name).isEqualTo("Hello");
+			assertThat(bean.counter).isEqualTo(30);
+		});
+	}
+
+	@Test
+	@CompileWithForkedClassLoader
 	void aotContributedInitializerBindsJavaBean() {
-		compile(createContext(JavaBeanSampleBeanConfiguration.class), (freshContext) -> {
+		compile(createContext(), (freshContext) -> {
 			TestPropertySourceUtils.addInlinedPropertiesToEnvironment(freshContext, "test.name=Hello");
 			freshContext.refresh();
 			JavaBeanSampleBean bean = freshContext.getBean(JavaBeanSampleBean.class);
@@ -148,7 +162,7 @@ class ConfigurationPropertiesBeanRegistrationAotProcessorTests {
 		TestCompiler.forSystem().with(generationContext).compile((compiled) -> {
 			GenericApplicationContext freshApplicationContext = new GenericApplicationContext();
 			ApplicationContextInitializer<GenericApplicationContext> initializer = compiled
-					.getInstance(ApplicationContextInitializer.class, className.toString());
+				.getInstance(ApplicationContextInitializer.class, className.toString());
 			initializer.initialize(freshApplicationContext);
 			freshContext.accept(freshApplicationContext);
 		});
@@ -189,6 +203,32 @@ class ConfigurationPropertiesBeanRegistrationAotProcessorTests {
 
 		ValueObjectSampleBean(String name) {
 			this.name = name;
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	@EnableConfigurationProperties(ValueObjectWithSpecificConstructorSampleBean.class)
+	static class ValueObjectSampleBeanWithSpecificConstructorConfiguration {
+
+	}
+
+	@ConfigurationProperties("test")
+	public static class ValueObjectWithSpecificConstructorSampleBean {
+
+		@SuppressWarnings("unused")
+		private final String name;
+
+		@SuppressWarnings("unused")
+		private final Integer counter;
+
+		ValueObjectWithSpecificConstructorSampleBean(String name, Integer counter) {
+			this.name = name;
+			this.counter = counter;
+		}
+
+		private ValueObjectWithSpecificConstructorSampleBean(String name) {
+			this(name, 42);
 		}
 
 	}

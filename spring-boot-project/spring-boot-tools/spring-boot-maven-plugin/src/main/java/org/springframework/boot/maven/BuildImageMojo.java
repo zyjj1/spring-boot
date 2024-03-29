@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,6 +48,7 @@ import org.springframework.boot.loader.tools.EntryWriter;
 import org.springframework.boot.loader.tools.ImagePackager;
 import org.springframework.boot.loader.tools.LayoutFactory;
 import org.springframework.boot.loader.tools.Libraries;
+import org.springframework.boot.loader.tools.LoaderImplementation;
 import org.springframework.util.StringUtils;
 
 /**
@@ -102,21 +103,23 @@ public abstract class BuildImageMojo extends AbstractPackagerMojo {
 	private Image image;
 
 	/**
-	 * Alias for {@link Image#name} to support configuration via command-line property.
+	 * Alias for {@link Image#name} to support configuration through command-line
+	 * property.
 	 * @since 2.3.0
 	 */
 	@Parameter(property = "spring-boot.build-image.imageName", readonly = true)
 	String imageName;
 
 	/**
-	 * Alias for {@link Image#builder} to support configuration via command-line property.
+	 * Alias for {@link Image#builder} to support configuration through command-line
+	 * property.
 	 * @since 2.3.0
 	 */
 	@Parameter(property = "spring-boot.build-image.builder", readonly = true)
 	String imageBuilder;
 
 	/**
-	 * Alias for {@link Image#runImage} to support configuration via command-line
+	 * Alias for {@link Image#runImage} to support configuration through command-line
 	 * property.
 	 * @since 2.3.1
 	 */
@@ -124,7 +127,7 @@ public abstract class BuildImageMojo extends AbstractPackagerMojo {
 	String runImage;
 
 	/**
-	 * Alias for {@link Image#cleanCache} to support configuration via command-line
+	 * Alias for {@link Image#cleanCache} to support configuration through command-line
 	 * property.
 	 * @since 2.4.0
 	 */
@@ -132,24 +135,42 @@ public abstract class BuildImageMojo extends AbstractPackagerMojo {
 	Boolean cleanCache;
 
 	/**
-	 * Alias for {@link Image#pullPolicy} to support configuration via command-line
+	 * Alias for {@link Image#pullPolicy} to support configuration through command-line
 	 * property.
 	 */
 	@Parameter(property = "spring-boot.build-image.pullPolicy", readonly = true)
 	PullPolicy pullPolicy;
 
 	/**
-	 * Alias for {@link Image#publish} to support configuration via command-line property.
+	 * Alias for {@link Image#publish} to support configuration through command-line
+	 * property.
 	 */
 	@Parameter(property = "spring-boot.build-image.publish", readonly = true)
 	Boolean publish;
 
 	/**
-	 * Alias for {@link Image#network} to support configuration via command-line property.
+	 * Alias for {@link Image#network} to support configuration through command-line
+	 * property.
 	 * @since 2.6.0
 	 */
 	@Parameter(property = "spring-boot.build-image.network", readonly = true)
 	String network;
+
+	/**
+	 * Alias for {@link Image#createdDate} to support configuration through command-line
+	 * property.
+	 * @since 3.1.0
+	 */
+	@Parameter(property = "spring-boot.build-image.createdDate", readonly = true)
+	String createdDate;
+
+	/**
+	 * Alias for {@link Image#applicationDirectory} to support configuration through
+	 * command-line property.
+	 * @since 3.1.0
+	 */
+	@Parameter(property = "spring-boot.build-image.applicationDirectory", readonly = true)
+	String applicationDirectory;
 
 	/**
 	 * Docker configuration options.
@@ -168,6 +189,13 @@ public abstract class BuildImageMojo extends AbstractPackagerMojo {
 	private LayoutType layout;
 
 	/**
+	 * The loader implementation that should be used.
+	 * @since 3.2.0
+	 */
+	@Parameter
+	private LoaderImplementation loaderImplementation;
+
+	/**
 	 * The layout factory that will be used to create the executable archive if no
 	 * explicit layout is set. Alternative layouts implementations can be provided by 3rd
 	 * parties.
@@ -184,6 +212,11 @@ public abstract class BuildImageMojo extends AbstractPackagerMojo {
 	@Override
 	protected LayoutType getLayout() {
 		return this.layout;
+	}
+
+	@Override
+	protected LoaderImplementation getLoaderImplementation() {
+		return this.loaderImplementation;
 	}
 
 	/**
@@ -248,6 +281,12 @@ public abstract class BuildImageMojo extends AbstractPackagerMojo {
 		}
 		if (image.network == null && this.network != null) {
 			image.setNetwork(this.network);
+		}
+		if (image.createdDate == null && this.createdDate != null) {
+			image.setCreatedDate(this.createdDate);
+		}
+		if (image.applicationDirectory == null && this.applicationDirectory != null) {
+			image.setApplicationDirectory(this.applicationDirectory);
 		}
 		return customize(image.getBuildRequest(this.project.getArtifact(), content));
 	}

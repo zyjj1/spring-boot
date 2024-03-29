@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,6 +40,7 @@ import org.springframework.data.jdbc.core.JdbcAggregateTemplate;
 import org.springframework.data.jdbc.core.convert.DataAccessStrategy;
 import org.springframework.data.jdbc.core.convert.JdbcConverter;
 import org.springframework.data.jdbc.core.convert.JdbcCustomConversions;
+import org.springframework.data.jdbc.core.dialect.JdbcPostgresDialect;
 import org.springframework.data.jdbc.core.mapping.JdbcMappingContext;
 import org.springframework.data.jdbc.repository.config.AbstractJdbcConfiguration;
 import org.springframework.data.jdbc.repository.config.EnableJdbcRepositories;
@@ -58,16 +59,17 @@ import static org.mockito.Mockito.mock;
  * @author Andy Wilkinson
  * @author Stephane Nicoll
  * @author Mark Paluch
+ * @author Jens Schauder
  */
 class JdbcRepositoriesAutoConfigurationTests {
 
 	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-			.withConfiguration(AutoConfigurations.of(JdbcRepositoriesAutoConfiguration.class));
+		.withConfiguration(AutoConfigurations.of(JdbcRepositoriesAutoConfiguration.class));
 
 	@Test
 	void backsOffWithNoDataSource() {
 		this.contextRunner.withUserConfiguration(TestConfiguration.class)
-				.run((context) -> assertThat(context).doesNotHaveBean(AbstractJdbcConfiguration.class));
+			.run((context) -> assertThat(context).doesNotHaveBean(AbstractJdbcConfiguration.class));
 	}
 
 	@Test
@@ -81,60 +83,64 @@ class JdbcRepositoriesAutoConfigurationTests {
 	@Test
 	void backsOffWithNoTransactionManager() {
 		this.contextRunner.with(database())
-				.withConfiguration(AutoConfigurations.of(JdbcTemplateAutoConfiguration.class))
-				.withUserConfiguration(TestConfiguration.class).run((context) -> {
-					assertThat(context).hasSingleBean(DataSource.class);
-					assertThat(context).hasSingleBean(NamedParameterJdbcOperations.class);
-					assertThat(context).doesNotHaveBean(AbstractJdbcConfiguration.class);
-				});
+			.withConfiguration(AutoConfigurations.of(JdbcTemplateAutoConfiguration.class))
+			.withUserConfiguration(TestConfiguration.class)
+			.run((context) -> {
+				assertThat(context).hasSingleBean(DataSource.class);
+				assertThat(context).hasSingleBean(NamedParameterJdbcOperations.class);
+				assertThat(context).doesNotHaveBean(AbstractJdbcConfiguration.class);
+			});
 	}
 
 	@Test
 	void basicAutoConfiguration() {
 		this.contextRunner.with(database())
-				.withConfiguration(AutoConfigurations.of(JdbcTemplateAutoConfiguration.class,
-						DataSourceTransactionManagerAutoConfiguration.class))
-				.withUserConfiguration(TestConfiguration.class).run((context) -> {
-					assertThat(context).hasSingleBean(AbstractJdbcConfiguration.class);
-					assertThat(context).hasSingleBean(CityRepository.class);
-					assertThat(context.getBean(CityRepository.class).findById(2000L)).isPresent();
-				});
+			.withConfiguration(AutoConfigurations.of(JdbcTemplateAutoConfiguration.class,
+					DataSourceTransactionManagerAutoConfiguration.class))
+			.withUserConfiguration(TestConfiguration.class)
+			.run((context) -> {
+				assertThat(context).hasSingleBean(AbstractJdbcConfiguration.class);
+				assertThat(context).hasSingleBean(CityRepository.class);
+				assertThat(context.getBean(CityRepository.class).findById(2000L)).isPresent();
+			});
 	}
 
 	@Test
 	void entityScanShouldSetManagedTypes() {
 		this.contextRunner.with(database())
-				.withConfiguration(AutoConfigurations.of(JdbcTemplateAutoConfiguration.class,
-						DataSourceTransactionManagerAutoConfiguration.class))
-				.withUserConfiguration(TestConfiguration.class).run((context) -> {
-					JdbcMappingContext mappingContext = context.getBean(JdbcMappingContext.class);
-					ManagedTypes managedTypes = (ManagedTypes) ReflectionTestUtils.getField(mappingContext,
-							"managedTypes");
-					assertThat(managedTypes.toList()).containsOnly(City.class);
-				});
+			.withConfiguration(AutoConfigurations.of(JdbcTemplateAutoConfiguration.class,
+					DataSourceTransactionManagerAutoConfiguration.class))
+			.withUserConfiguration(TestConfiguration.class)
+			.run((context) -> {
+				JdbcMappingContext mappingContext = context.getBean(JdbcMappingContext.class);
+				ManagedTypes managedTypes = (ManagedTypes) ReflectionTestUtils.getField(mappingContext, "managedTypes");
+				assertThat(managedTypes.toList()).containsOnly(City.class);
+			});
 	}
 
 	@Test
 	void autoConfigurationWithNoRepositories() {
 		this.contextRunner.with(database())
-				.withConfiguration(AutoConfigurations.of(JdbcTemplateAutoConfiguration.class,
-						DataSourceTransactionManagerAutoConfiguration.class))
-				.withUserConfiguration(EmptyConfiguration.class).run((context) -> {
-					assertThat(context).hasSingleBean(AbstractJdbcConfiguration.class);
-					assertThat(context).doesNotHaveBean(Repository.class);
-				});
+			.withConfiguration(AutoConfigurations.of(JdbcTemplateAutoConfiguration.class,
+					DataSourceTransactionManagerAutoConfiguration.class))
+			.withUserConfiguration(EmptyConfiguration.class)
+			.run((context) -> {
+				assertThat(context).hasSingleBean(AbstractJdbcConfiguration.class);
+				assertThat(context).doesNotHaveBean(Repository.class);
+			});
 	}
 
 	@Test
 	void honoursUsersEnableJdbcRepositoriesConfiguration() {
 		this.contextRunner.with(database())
-				.withConfiguration(AutoConfigurations.of(JdbcTemplateAutoConfiguration.class,
-						DataSourceTransactionManagerAutoConfiguration.class))
-				.withUserConfiguration(EnableRepositoriesConfiguration.class).run((context) -> {
-					assertThat(context).hasSingleBean(AbstractJdbcConfiguration.class);
-					assertThat(context).hasSingleBean(CityRepository.class);
-					assertThat(context.getBean(CityRepository.class).findById(2000L)).isPresent();
-				});
+			.withConfiguration(AutoConfigurations.of(JdbcTemplateAutoConfiguration.class,
+					DataSourceTransactionManagerAutoConfiguration.class))
+			.withUserConfiguration(EnableRepositoriesConfiguration.class)
+			.run((context) -> {
+				assertThat(context).hasSingleBean(AbstractJdbcConfiguration.class);
+				assertThat(context).hasSingleBean(CityRepository.class);
+				assertThat(context.getBean(CityRepository.class).findById(2000L)).isPresent();
+			});
 	}
 
 	@Test
@@ -177,23 +183,33 @@ class JdbcRepositoriesAutoConfigurationTests {
 		allowsUserToDefineCustomBean(DialectConfiguration.class, Dialect.class, "customDialect");
 	}
 
+	@Test
+	void allowsConfigurationOfDialectByProperty() {
+		this.contextRunner.with(database())
+			.withPropertyValues("spring.data.jdbc.dialect=postgresql")
+			.withConfiguration(AutoConfigurations.of(JdbcTemplateAutoConfiguration.class,
+					DataSourceTransactionManagerAutoConfiguration.class))
+			.withUserConfiguration(TestConfiguration.class)
+			.run((context) -> assertThat(context).hasSingleBean(JdbcPostgresDialect.class));
+	}
+
 	private void allowsUserToDefineCustomBean(Class<?> configuration, Class<?> beanType, String beanName) {
 		this.contextRunner.with(database())
-				.withConfiguration(AutoConfigurations.of(JdbcTemplateAutoConfiguration.class,
-						DataSourceTransactionManagerAutoConfiguration.class))
-				.withUserConfiguration(configuration, EmptyConfiguration.class).run((context) -> {
-					assertThat(context).hasSingleBean(beanType);
-					assertThat(context).hasBean(beanName);
-				});
+			.withConfiguration(AutoConfigurations.of(JdbcTemplateAutoConfiguration.class,
+					DataSourceTransactionManagerAutoConfiguration.class))
+			.withUserConfiguration(configuration, EmptyConfiguration.class)
+			.run((context) -> {
+				assertThat(context).hasSingleBean(beanType);
+				assertThat(context).hasBean(beanName);
+			});
 	}
 
 	private Function<ApplicationContextRunner, ApplicationContextRunner> database() {
 		return (runner) -> runner
-				.withConfiguration(AutoConfigurations.of(DataSourceAutoConfiguration.class,
-						SqlInitializationAutoConfiguration.class))
-				.withPropertyValues("spring.sql.init.schema-locations=classpath:data-city-schema.sql",
-						"spring.sql.init.data-locations=classpath:city.sql",
-						"spring.datasource.generate-unique-name:true");
+			.withConfiguration(
+					AutoConfigurations.of(DataSourceAutoConfiguration.class, SqlInitializationAutoConfiguration.class))
+			.withPropertyValues("spring.sql.init.schema-locations=classpath:data-city-schema.sql",
+					"spring.sql.init.data-locations=classpath:city.sql", "spring.datasource.generate-unique-name:true");
 	}
 
 	@TestAutoConfigurationPackage(City.class)
@@ -228,7 +244,7 @@ class JdbcRepositoriesAutoConfigurationTests {
 
 		@Bean
 		JdbcMappingContext customJdbcMappingContext() {
-			return mock(JdbcMappingContext.class);
+			return mock(JdbcMappingContext.class, Answers.RETURNS_MOCKS);
 		}
 
 	}
@@ -238,7 +254,7 @@ class JdbcRepositoriesAutoConfigurationTests {
 
 		@Bean
 		JdbcConverter customJdbcConverter() {
-			return mock(JdbcConverter.class);
+			return mock(JdbcConverter.class, Answers.RETURNS_MOCKS);
 		}
 
 	}
@@ -258,7 +274,7 @@ class JdbcRepositoriesAutoConfigurationTests {
 
 		@Bean
 		JdbcAggregateTemplate customJdbcAggregateTemplate() {
-			return mock(JdbcAggregateTemplate.class);
+			return mock(JdbcAggregateTemplate.class, Answers.RETURNS_MOCKS);
 		}
 
 	}
@@ -268,7 +284,7 @@ class JdbcRepositoriesAutoConfigurationTests {
 
 		@Bean
 		DataAccessStrategy customDataAccessStrategy() {
-			return mock(DataAccessStrategy.class);
+			return mock(DataAccessStrategy.class, Answers.RETURNS_MOCKS);
 		}
 
 	}

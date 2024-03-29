@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,7 +47,8 @@ class StaticResourceJars {
 		}
 		else {
 			return getUrlsFrom(Stream.of(ManagementFactory.getRuntimeMXBean().getClassPath().split(File.pathSeparator))
-					.map(this::toUrl).toArray(URL[]::new));
+				.map(this::toUrl)
+				.toArray(URL[]::new));
 		}
 	}
 
@@ -114,7 +115,7 @@ class StaticResourceJars {
 
 	private boolean isResourcesJar(JarURLConnection connection) {
 		try {
-			return isResourcesJar(connection.getJarFile());
+			return isResourcesJar(connection.getJarFile(), !connection.getUseCaches());
 		}
 		catch (IOException ex) {
 			return false;
@@ -123,19 +124,21 @@ class StaticResourceJars {
 
 	private boolean isResourcesJar(File file) {
 		try {
-			return isResourcesJar(new JarFile(file));
+			return isResourcesJar(new JarFile(file), true);
 		}
 		catch (IOException | InvalidPathException ex) {
 			return false;
 		}
 	}
 
-	private boolean isResourcesJar(JarFile jar) throws IOException {
+	private boolean isResourcesJar(JarFile jarFile, boolean closeJarFile) throws IOException {
 		try {
-			return jar.getName().endsWith(".jar") && (jar.getJarEntry("META-INF/resources") != null);
+			return jarFile.getName().endsWith(".jar") && (jarFile.getJarEntry("META-INF/resources") != null);
 		}
 		finally {
-			jar.close();
+			if (closeJarFile) {
+				jarFile.close();
+			}
 		}
 	}
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -69,6 +69,8 @@ public abstract class BootBuildImage extends DefaultTask {
 
 	private final String projectName;
 
+	private final CacheSpec buildWorkspace;
+
 	private final CacheSpec buildCache;
 
 	private final CacheSpec launchCache;
@@ -78,8 +80,9 @@ public abstract class BootBuildImage extends DefaultTask {
 	public BootBuildImage() {
 		this.projectName = getProject().getName();
 		Project project = getProject();
-		Property<String> projectVersion = project.getObjects().property(String.class)
-				.convention(project.provider(() -> project.getVersion().toString()));
+		Property<String> projectVersion = project.getObjects()
+			.property(String.class)
+			.convention(project.provider(() -> project.getVersion().toString()));
 		getImageName().convention(project.provider(() -> {
 			ImageName imageName = ImageName.of(this.projectName);
 			if ("unspecified".equals(projectVersion.get())) {
@@ -90,6 +93,7 @@ public abstract class BootBuildImage extends DefaultTask {
 		getCleanCache().convention(false);
 		getVerboseLogging().convention(false);
 		getPublish().convention(false);
+		this.buildWorkspace = getProject().getObjects().newInstance(CacheSpec.class);
 		this.buildCache = getProject().getObjects().newInstance(CacheSpec.class);
 		this.launchCache = getProject().getObjects().newInstance(CacheSpec.class);
 		this.docker = getProject().getObjects().newInstance(DockerSpec.class);
@@ -222,6 +226,27 @@ public abstract class BootBuildImage extends DefaultTask {
 	public abstract Property<String> getNetwork();
 
 	/**
+	 * Returns the build temporary workspace that will be used when building the image.
+	 * @return the cache
+	 * @since 3.2.0
+	 */
+	@Nested
+	@Optional
+	public CacheSpec getBuildWorkspace() {
+		return this.buildWorkspace;
+	}
+
+	/**
+	 * Customizes the {@link CacheSpec} for the build temporary workspace using the given
+	 * {@code action}.
+	 * @param action the action
+	 * @since 3.2.0
+	 */
+	public void buildWorkspace(Action<CacheSpec> action) {
+		action.execute(this.buildWorkspace);
+	}
+
+	/**
 	 * Returns the build cache that will be used when building the image.
 	 * @return the cache
 	 */
@@ -258,6 +283,35 @@ public abstract class BootBuildImage extends DefaultTask {
 	public void launchCache(Action<CacheSpec> action) {
 		action.execute(this.launchCache);
 	}
+
+	/**
+	 * Returns the date that will be used as the {@code Created} date of the image. When
+	 * {@code null}, a fixed date that enables build reproducibility will be used.
+	 * @return the created date
+	 */
+	@Input
+	@Optional
+	@Option(option = "createdDate", description = "The date to use as the created date of the image")
+	public abstract Property<String> getCreatedDate();
+
+	/**
+	 * Returns the directory that contains application content in the image. When
+	 * {@code null}, a default location will be used.
+	 * @return the application directory
+	 */
+	@Input
+	@Optional
+	@Option(option = "applicationDirectory", description = "The directory containing application content in the image")
+	public abstract Property<String> getApplicationDirectory();
+
+	/**
+	 * Returns the security options that will be applied to the builder container.
+	 * @return the security options
+	 */
+	@Input
+	@Optional
+	@Option(option = "securityOptions", description = "Security options that will be applied to the builder container")
+	public abstract ListProperty<String> getSecurityOptions();
 
 	/**
 	 * Returns the Docker configuration the builder will use.
@@ -304,6 +358,9 @@ public abstract class BootBuildImage extends DefaultTask {
 		request = customizeTags(request);
 		request = customizeCaches(request);
 		request = request.withNetwork(getNetwork().getOrNull());
+		request = customizeCreatedDate(request);
+		request = customizeApplicationDirectory(request);
+		request = customizeSecurityOptions(request);
 		return request;
 	}
 
@@ -377,11 +434,38 @@ public abstract class BootBuildImage extends DefaultTask {
 	}
 
 	private BuildRequest customizeCaches(BuildRequest request) {
+		if (this.buildWorkspace.asCache() != null) {
+			request = request.withBuildWorkspace((this.buildWorkspace.asCache()));
+		}
 		if (this.buildCache.asCache() != null) {
 			request = request.withBuildCache(this.buildCache.asCache());
 		}
 		if (this.launchCache.asCache() != null) {
 			request = request.withLaunchCache(this.launchCache.asCache());
+		}
+		return request;
+	}
+
+	private BuildRequest customizeCreatedDate(BuildRequest request) {
+		String createdDate = getCreatedDate().getOrNull();
+		if (createdDate != null) {
+			return request.withCreatedDate(createdDate);
+		}
+		return request;
+	}
+
+	private BuildRequest customizeApplicationDirectory(BuildRequest request) {
+		String applicationDirectory = getApplicationDirectory().getOrNull();
+		if (applicationDirectory != null) {
+			return request.withApplicationDirectory(applicationDirectory);
+		}
+		return request;
+	}
+
+	private BuildRequest customizeSecurityOptions(BuildRequest request) {
+		List<String> securityOptions = getSecurityOptions().getOrNull();
+		if (securityOptions != null) {
+			return request.withSecurityOptions(securityOptions);
 		}
 		return request;
 	}

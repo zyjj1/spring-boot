@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -73,7 +73,7 @@ public class HttpExchangesWebFilter implements WebFilter, Ordered {
 		Mono<?> principal = exchange.getPrincipal().cast(Object.class).defaultIfEmpty(NONE);
 		Mono<Object> session = exchange.getSession().cast(Object.class).defaultIfEmpty(NONE);
 		return Mono.zip(PrincipalAndSession::new, principal, session)
-				.flatMap((principalAndSession) -> filter(exchange, chain, principalAndSession));
+			.flatMap((principalAndSession) -> filter(exchange, chain, principalAndSession));
 	}
 
 	private Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain,
@@ -83,10 +83,10 @@ public class HttpExchangesWebFilter implements WebFilter, Ordered {
 
 	private void addExchangeOnCommit(ServerWebExchange exchange, PrincipalAndSession principalAndSession) {
 		RecordableServerHttpRequest sourceRequest = new RecordableServerHttpRequest(exchange.getRequest());
-		HttpExchange.Started startedHtppExchange = HttpExchange.start(sourceRequest);
+		HttpExchange.Started startedHttpExchange = HttpExchange.start(sourceRequest);
 		exchange.getResponse().beforeCommit(() -> {
 			RecordableServerHttpResponse sourceResponse = new RecordableServerHttpResponse(exchange.getResponse());
-			HttpExchange finishedExchange = startedHtppExchange.finish(sourceResponse,
+			HttpExchange finishedExchange = startedHttpExchange.finish(sourceResponse,
 					principalAndSession::getPrincipal, principalAndSession::getSessionId, this.includes);
 			this.repository.add(finishedExchange);
 			return Mono.empty();

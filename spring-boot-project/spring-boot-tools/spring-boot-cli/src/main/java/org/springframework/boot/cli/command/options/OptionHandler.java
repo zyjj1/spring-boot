@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -145,14 +145,14 @@ public class OptionHandler {
 		return this.optionHelp;
 	}
 
-	private static class OptionHelpFormatter implements HelpFormatter {
+	private static final class OptionHelpFormatter implements HelpFormatter {
 
 		private final List<OptionHelp> help = new ArrayList<>();
 
 		@Override
 		public String format(Map<String, ? extends OptionDescriptor> options) {
 			Comparator<OptionDescriptor> comparator = Comparator
-					.comparing((optionDescriptor) -> optionDescriptor.options().iterator().next());
+				.comparing((optionDescriptor) -> optionDescriptor.options().iterator().next());
 			Set<OptionDescriptor> sorted = new TreeSet<>(comparator);
 			sorted.addAll(options.values());
 			for (OptionDescriptor descriptor : sorted) {

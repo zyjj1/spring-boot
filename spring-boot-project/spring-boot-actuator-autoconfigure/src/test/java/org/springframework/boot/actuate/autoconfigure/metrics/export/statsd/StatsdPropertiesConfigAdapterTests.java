@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,6 +22,8 @@ import io.micrometer.statsd.StatsdFlavor;
 import io.micrometer.statsd.StatsdProtocol;
 import org.junit.jupiter.api.Test;
 
+import org.springframework.boot.actuate.autoconfigure.metrics.export.properties.AbstractPropertiesConfigAdapterTests;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -29,7 +31,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Johnny Lim
  */
-class StatsdPropertiesConfigAdapterTests {
+class StatsdPropertiesConfigAdapterTests
+		extends AbstractPropertiesConfigAdapterTests<StatsdProperties, StatsdPropertiesConfigAdapter> {
+
+	protected StatsdPropertiesConfigAdapterTests() {
+		super(StatsdPropertiesConfigAdapter.class);
+	}
 
 	@Test
 	void whenPropertiesEnabledIsSetAdapterEnabledReturnsIt() {
@@ -71,7 +78,7 @@ class StatsdPropertiesConfigAdapterTests {
 		StatsdProperties properties = new StatsdProperties();
 		properties.setMaxPacketLength(1234);
 		assertThat(new StatsdPropertiesConfigAdapter(properties).maxPacketLength())
-				.isEqualTo(properties.getMaxPacketLength());
+			.isEqualTo(properties.getMaxPacketLength());
 	}
 
 	@Test
@@ -79,7 +86,7 @@ class StatsdPropertiesConfigAdapterTests {
 		StatsdProperties properties = new StatsdProperties();
 		properties.setPollingFrequency(Duration.ofSeconds(1));
 		assertThat(new StatsdPropertiesConfigAdapter(properties).pollingFrequency())
-				.isEqualTo(properties.getPollingFrequency());
+			.isEqualTo(properties.getPollingFrequency());
 	}
 
 	@Test
@@ -94,7 +101,7 @@ class StatsdPropertiesConfigAdapterTests {
 		StatsdProperties properties = new StatsdProperties();
 		properties.setPublishUnchangedMeters(false);
 		assertThat(new StatsdPropertiesConfigAdapter(properties).publishUnchangedMeters())
-				.isEqualTo(properties.isPublishUnchangedMeters());
+			.isEqualTo(properties.isPublishUnchangedMeters());
 	}
 
 	@Test

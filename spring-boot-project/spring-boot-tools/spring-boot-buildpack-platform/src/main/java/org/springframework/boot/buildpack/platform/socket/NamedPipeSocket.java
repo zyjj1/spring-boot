@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -113,7 +113,7 @@ public class NamedPipeSocket extends Socket {
 
 		@Override
 		public <A> void read(ByteBuffer dst, A attachment, CompletionHandler<Integer, ? super A> handler) {
-			this.fileChannel.read(dst, 0, attachment, new CompletionHandler<Integer, A>() {
+			this.fileChannel.read(dst, 0, attachment, new CompletionHandler<>() {
 
 				@Override
 				public void completed(Integer read, A attachment) {
@@ -159,7 +159,7 @@ public class NamedPipeSocket extends Socket {
 			return this.fileChannel.isOpen();
 		}
 
-		private static class CompletableFutureHandler extends CompletableFuture<Integer>
+		private static final class CompletableFutureHandler extends CompletableFuture<Integer>
 				implements CompletionHandler<Integer, Object> {
 
 			@Override
@@ -183,7 +183,7 @@ public class NamedPipeSocket extends Socket {
 	/**
 	 * Waits for the name pipe file using a simple sleep.
 	 */
-	private static class SleepAwaiter implements Consumer<String> {
+	private static final class SleepAwaiter implements Consumer<String> {
 
 		@Override
 		public void accept(String path) {
@@ -200,7 +200,7 @@ public class NamedPipeSocket extends Socket {
 	/**
 	 * Waits for the name pipe file using Windows specific logic.
 	 */
-	private static class WindowsAwaiter implements Consumer<String> {
+	private static final class WindowsAwaiter implements Consumer<String> {
 
 		@Override
 		public void accept(String path) {

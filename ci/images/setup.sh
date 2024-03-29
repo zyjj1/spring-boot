@@ -2,12 +2,13 @@
 set -ex
 
 ###########################################################
-# UTILS
+# OS and UTILS
 ###########################################################
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install --no-install-recommends -y tzdata ca-certificates net-tools libxml2-utils git curl libudev1 libxml2-utils iptables iproute2 jq
+apt-get install --no-install-recommends -y locales tzdata ca-certificates net-tools libxml2-utils git curl libudev1 libxml2-utils iptables iproute2 jq
+locale-gen en_US.utf8
 ln -fs /usr/share/zoneinfo/UTC /etc/localtime
 dpkg-reconfigure --frontend noninteractive tzdata
 rm -rf /var/lib/apt/lists/*
@@ -37,6 +38,7 @@ if [[ $# -eq 2 ]]; then
 	test -f /opt/openjdk-toolchain/bin/javac
 fi
 
+
 ###########################################################
 # DOCKER
 ###########################################################
@@ -52,8 +54,11 @@ chmod +x entrykit && \
 mv entrykit /bin/entrykit && \
 entrykit --symlink
 
+
 ###########################################################
-# GRADLE ENTERPRISE
+# DOCKER COMPOSE
 ###########################################################
-mkdir ~/.gradle
-echo 'systemProp.user.name=concourse' > ~/.gradle/gradle.properties
+mkdir -p /usr/local/lib/docker/cli-plugins
+DOCKER_COMPOSE_URL=$( ./get-docker-compose-url.sh )
+curl -L ${DOCKER_COMPOSE_URL} -o /usr/local/lib/docker/cli-plugins/docker-compose
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose

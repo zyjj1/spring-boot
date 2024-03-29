@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@ import javax.inject.Inject;
 import org.gradle.api.Project;
 import org.gradle.api.provider.MapProperty;
 import org.gradle.api.provider.Property;
+import org.gradle.api.provider.Provider;
 import org.gradle.api.provider.SetProperty;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.Internal;
@@ -56,7 +57,7 @@ public abstract class BuildInfoProperties implements Serializable {
 		getGroup().convention(project.provider(() -> project.getGroup().toString()));
 		getVersion().convention(project.provider(() -> project.getVersion().toString()));
 		getArtifact()
-				.convention(project.provider(() -> project.findProperty("archivesBaseName")).map(Object::toString));
+			.convention(project.provider(() -> project.findProperty("archivesBaseName")).map(Object::toString));
 		getName().convention(project.provider(project::getName));
 	}
 
@@ -155,7 +156,12 @@ public abstract class BuildInfoProperties implements Serializable {
 
 	private Map<String, String> coerceToStringValues(Map<String, Object> input) {
 		Map<String, String> output = new HashMap<>();
-		input.forEach((key, value) -> output.put(key, (value != null) ? value.toString() : null));
+		input.forEach((key, value) -> {
+			if (value instanceof Provider<?> provider) {
+				value = provider.getOrNull();
+			}
+			output.put(key, (value != null) ? value.toString() : null);
+		});
 		return output;
 	}
 

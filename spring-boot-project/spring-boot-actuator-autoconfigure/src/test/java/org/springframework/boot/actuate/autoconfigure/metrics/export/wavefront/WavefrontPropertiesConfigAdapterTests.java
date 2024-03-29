@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,17 @@
 
 package org.springframework.boot.actuate.autoconfigure.metrics.export.wavefront;
 
+import java.net.URI;
+
+import com.wavefront.sdk.common.clients.service.token.TokenService.Type;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import org.springframework.boot.actuate.autoconfigure.metrics.export.properties.PushRegistryPropertiesConfigAdapterTests;
 import org.springframework.boot.actuate.autoconfigure.wavefront.WavefrontProperties;
 import org.springframework.boot.actuate.autoconfigure.wavefront.WavefrontProperties.Metrics.Export;
+import org.springframework.boot.actuate.autoconfigure.wavefront.WavefrontProperties.TokenType;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -32,6 +38,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class WavefrontPropertiesConfigAdapterTests extends
 		PushRegistryPropertiesConfigAdapterTests<WavefrontProperties.Metrics.Export, WavefrontPropertiesConfigAdapter> {
+
+	protected WavefrontPropertiesConfigAdapterTests() {
+		super(WavefrontPropertiesConfigAdapter.class);
+	}
 
 	@Override
 	protected WavefrontProperties.Metrics.Export createProperties() {
@@ -56,7 +66,65 @@ class WavefrontPropertiesConfigAdapterTests extends
 	protected void whenPropertiesBatchSizeIsSetAdapterBatchSizeReturnsIt() {
 		WavefrontProperties properties = new WavefrontProperties();
 		properties.getSender().setBatchSize(10042);
-		assertThat(createConfigAdapter(properties.getMetrics().getExport()).batchSize()).isEqualTo(10042);
+		assertThat(new WavefrontPropertiesConfigAdapter(properties).batchSize()).isEqualTo(10042);
+	}
+
+	@Test
+	void whenPropertiesUriIsSetAdapterUriReturnsIt() {
+		WavefrontProperties properties = new WavefrontProperties();
+		properties.setUri(URI.create("https://example.wavefront.com"));
+		assertThat(new WavefrontPropertiesConfigAdapter(properties).uri()).isEqualTo("https://example.wavefront.com");
+	}
+
+	@Test
+	void whenPropertiesApiTokenIsSetAdapterApiTokenReturnsIt() {
+		WavefrontProperties properties = new WavefrontProperties();
+		properties.setApiToken("my-token");
+		assertThat(new WavefrontPropertiesConfigAdapter(properties).apiToken()).isEqualTo("my-token");
+	}
+
+	@Test
+	void whenPropertiesSourceIsSetAdapterSourceReturnsIt() {
+		WavefrontProperties properties = new WavefrontProperties();
+		properties.setSource("DESKTOP-GA5");
+		assertThat(new WavefrontPropertiesConfigAdapter(properties).source()).isEqualTo("DESKTOP-GA5");
+	}
+
+	@Test
+	void whenPropertiesReportMinuteDistributionIsSetAdapterReportMinuteDistributionReturnsIt() {
+		Export properties = createProperties();
+		properties.setReportMinuteDistribution(false);
+		assertThat(createConfigAdapter(properties).reportMinuteDistribution()).isFalse();
+	}
+
+	@Test
+	void whenPropertiesReportHourDistributionIsSetAdapterReportHourDistributionReturnsIt() {
+		Export properties = createProperties();
+		properties.setReportHourDistribution(true);
+		assertThat(createConfigAdapter(properties).reportHourDistribution()).isTrue();
+	}
+
+	@Test
+	void whenPropertiesReportDayDistributionIsSetAdapterReportDayDistributionReturnsIt() {
+		Export properties = createProperties();
+		properties.setReportDayDistribution(true);
+		assertThat(createConfigAdapter(properties).reportDayDistribution()).isTrue();
+	}
+
+	@ParameterizedTest
+	@CsvSource(textBlock = """
+			null,					WAVEFRONT_API_TOKEN
+			NO_TOKEN,				NO_TOKEN
+			WAVEFRONT_API_TOKEN,	WAVEFRONT_API_TOKEN
+			CSP_API_TOKEN,			CSP_API_TOKEN
+			CSP_CLIENT_CREDENTIALS,	CSP_CLIENT_CREDENTIALS
+			""")
+	void whenTokenTypeIsSetAdapterReturnsIt(String property, String wavefront) {
+		TokenType propertyTokenType = property.equals("null") ? null : TokenType.valueOf(property);
+		Type wavefrontTokenType = Type.valueOf(wavefront);
+		WavefrontProperties properties = new WavefrontProperties();
+		properties.setApiTokenType(propertyTokenType);
+		assertThat(new WavefrontPropertiesConfigAdapter(properties).apiTokenType()).isEqualTo(wavefrontTokenType);
 	}
 
 }

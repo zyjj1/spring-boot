@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -85,6 +85,12 @@ public class StartMojo extends AbstractRunMojo {
 
 	private final Object lock = new Object();
 
+	/**
+	 * Flag to include the test classpath when running.
+	 */
+	@Parameter(property = "spring-boot.run.useTestClasspath", defaultValue = "false")
+	private Boolean useTestClasspath;
+
 	@Override
 	protected void run(JavaProcessExecutor processExecutor, File workingDirectory, List<String> args,
 			Map<String, String> environmentVariables) throws MojoExecutionException, MojoFailureException {
@@ -133,7 +139,8 @@ public class StartMojo extends AbstractRunMojo {
 			}
 		}
 		catch (IOException ex) {
-			throw new MojoFailureException("Could not contact Spring Boot application", ex);
+			throw new MojoFailureException("Could not contact Spring Boot application via JMX on port " + this.jmxPort
+					+ ". Please make sure that no other process is using that port", ex);
 		}
 		catch (Exception ex) {
 			throw new MojoExecutionException("Failed to connect to MBean server at port " + this.jmxPort, ex);
@@ -185,6 +192,11 @@ public class StartMojo extends AbstractRunMojo {
 		}
 		throw new MojoExecutionException(
 				"Spring application did not start before the configured timeout (" + (wait * maxAttempts) + "ms");
+	}
+
+	@Override
+	protected boolean isUseTestClasspath() {
+		return this.useTestClasspath;
 	}
 
 	private class CreateJmxConnector implements Callable<JMXConnector> {

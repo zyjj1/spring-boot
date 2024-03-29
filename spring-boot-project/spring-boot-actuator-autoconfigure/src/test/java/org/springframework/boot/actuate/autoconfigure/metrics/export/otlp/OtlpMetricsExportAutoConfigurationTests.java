@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import io.micrometer.registry.otlp.OtlpConfig;
 import io.micrometer.registry.otlp.OtlpMeterRegistry;
 import org.junit.jupiter.api.Test;
 
+import org.springframework.boot.actuate.autoconfigure.metrics.export.otlp.OtlpMetricsExportAutoConfiguration.PropertiesOtlpMetricsConnectionDetails;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
@@ -37,7 +38,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class OtlpMetricsExportAutoConfigurationTests {
 
 	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-			.withConfiguration(AutoConfigurations.of(OtlpMetricsExportAutoConfiguration.class));
+		.withConfiguration(AutoConfigurations.of(OtlpMetricsExportAutoConfiguration.class));
 
 	@Test
 	void backsOffWithoutAClock() {
@@ -46,35 +47,58 @@ class OtlpMetricsExportAutoConfigurationTests {
 
 	@Test
 	void autoConfiguresConfigAndMeterRegistry() {
-		this.contextRunner.withUserConfiguration(BaseConfiguration.class).run((context) -> assertThat(context)
-				.hasSingleBean(OtlpMeterRegistry.class).hasSingleBean(OtlpConfig.class));
+		this.contextRunner.withUserConfiguration(BaseConfiguration.class)
+			.run((context) -> assertThat(context).hasSingleBean(OtlpMeterRegistry.class)
+				.hasSingleBean(OtlpConfig.class));
 	}
 
 	@Test
 	void autoConfigurationCanBeDisabledWithDefaultsEnabledProperty() {
 		this.contextRunner.withUserConfiguration(BaseConfiguration.class)
-				.withPropertyValues("management.defaults.metrics.export.enabled=false")
-				.run((context) -> assertThat(context).doesNotHaveBean(OtlpMeterRegistry.class)
-						.doesNotHaveBean(OtlpConfig.class));
+			.withPropertyValues("management.defaults.metrics.export.enabled=false")
+			.run((context) -> assertThat(context).doesNotHaveBean(OtlpMeterRegistry.class)
+				.doesNotHaveBean(OtlpConfig.class));
 	}
 
 	@Test
 	void autoConfigurationCanBeDisabledWithSpecificEnabledProperty() {
 		this.contextRunner.withUserConfiguration(BaseConfiguration.class)
-				.withPropertyValues("management.otlp.metrics.export.enabled=false").run((context) -> assertThat(context)
-						.doesNotHaveBean(OtlpMeterRegistry.class).doesNotHaveBean(OtlpConfig.class));
+			.withPropertyValues("management.otlp.metrics.export.enabled=false")
+			.run((context) -> assertThat(context).doesNotHaveBean(OtlpMeterRegistry.class)
+				.doesNotHaveBean(OtlpConfig.class));
 	}
 
 	@Test
 	void allowsCustomConfigToBeUsed() {
-		this.contextRunner.withUserConfiguration(CustomConfigConfiguration.class).run((context) -> assertThat(context)
-				.hasSingleBean(OtlpMeterRegistry.class).hasSingleBean(OtlpConfig.class).hasBean("customConfig"));
+		this.contextRunner.withUserConfiguration(CustomConfigConfiguration.class)
+			.run((context) -> assertThat(context).hasSingleBean(OtlpMeterRegistry.class)
+				.hasSingleBean(OtlpConfig.class)
+				.hasBean("customConfig"));
 	}
 
 	@Test
 	void allowsRegistryToBeCustomized() {
-		this.contextRunner.withUserConfiguration(CustomRegistryConfiguration.class).run((context) -> assertThat(context)
-				.hasSingleBean(OtlpMeterRegistry.class).hasSingleBean(OtlpConfig.class).hasBean("customRegistry"));
+		this.contextRunner.withUserConfiguration(CustomRegistryConfiguration.class)
+			.run((context) -> assertThat(context).hasSingleBean(OtlpMeterRegistry.class)
+				.hasSingleBean(OtlpConfig.class)
+				.hasBean("customRegistry"));
+	}
+
+	@Test
+	void definesPropertiesBasedConnectionDetailsByDefault() {
+		this.contextRunner.withUserConfiguration(BaseConfiguration.class)
+			.run((context) -> assertThat(context).hasSingleBean(PropertiesOtlpMetricsConnectionDetails.class));
+	}
+
+	@Test
+	void testConnectionFactoryWithOverridesWhenUsingCustomConnectionDetails() {
+		this.contextRunner.withUserConfiguration(BaseConfiguration.class, ConnectionDetailsConfiguration.class)
+			.run((context) -> {
+				assertThat(context).hasSingleBean(OtlpMetricsConnectionDetails.class)
+					.doesNotHaveBean(PropertiesOtlpMetricsConnectionDetails.class);
+				OtlpConfig config = context.getBean(OtlpConfig.class);
+				assertThat(config.url()).isEqualTo("http://localhost:12345/v1/metrics");
+			});
 	}
 
 	@Configuration(proxyBeanMethods = false)
@@ -105,6 +129,16 @@ class OtlpMetricsExportAutoConfigurationTests {
 		@Bean
 		OtlpMeterRegistry customRegistry(OtlpConfig config, Clock clock) {
 			return new OtlpMeterRegistry(config, clock);
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class ConnectionDetailsConfiguration {
+
+		@Bean
+		OtlpMetricsConnectionDetails otlpConnectionDetails() {
+			return () -> "http://localhost:12345/v1/metrics";
 		}
 
 	}

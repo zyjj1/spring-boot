@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import java.nio.charset.Charset;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.encoder.PatternLayoutEncoder;
+import ch.qos.logback.classic.filter.ThresholdFilter;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.Appender;
 import ch.qos.logback.core.ConsoleAppender;
@@ -42,6 +43,7 @@ import org.springframework.boot.logging.LogFile;
  * @author Vedran Pavic
  * @author Robert Thornton
  * @author Scott Frederick
+ * @author Jonatan Ivanov
  */
 class DefaultLogbackConfiguration {
 
@@ -66,21 +68,29 @@ class DefaultLogbackConfiguration {
 	}
 
 	private void defaults(LogbackConfigurator config) {
+		config.conversionRule("applicationName", ApplicationNameConverter.class);
 		config.conversionRule("clr", ColorConverter.class);
+		config.conversionRule("correlationId", CorrelationIdConverter.class);
 		config.conversionRule("wex", WhitespaceThrowableProxyConverter.class);
 		config.conversionRule("wEx", ExtendedWhitespaceThrowableProxyConverter.class);
-		config.getContext().putProperty("CONSOLE_LOG_PATTERN", resolve(config, "${CONSOLE_LOG_PATTERN:-"
-				+ "%clr(%d{${LOG_DATEFORMAT_PATTERN:-yyyy-MM-dd'T'HH:mm:ss.SSSXXX}}){faint} %clr(${LOG_LEVEL_PATTERN:-%5p}) "
-				+ "%clr(${PID:- }){magenta} %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} "
-				+ "%clr(:){faint} %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}}"));
+		config.getContext()
+			.putProperty("CONSOLE_LOG_PATTERN", resolve(config, "${CONSOLE_LOG_PATTERN:-"
+					+ "%clr(%d{${LOG_DATEFORMAT_PATTERN:-yyyy-MM-dd'T'HH:mm:ss.SSSXXX}}){faint} %clr(${LOG_LEVEL_PATTERN:-%5p}) "
+					+ "%clr(${PID:- }){magenta} %clr(---){faint} %clr(%applicationName[%15.15t]){faint} "
+					+ "%clr(${LOG_CORRELATION_PATTERN:-}){faint}%clr(%-40.40logger{39}){cyan} "
+					+ "%clr(:){faint} %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}}"));
 		String defaultCharset = Charset.defaultCharset().name();
-		config.getContext().putProperty("CONSOLE_LOG_CHARSET",
-				resolve(config, "${CONSOLE_LOG_CHARSET:-" + defaultCharset + "}"));
-		config.getContext().putProperty("FILE_LOG_PATTERN", resolve(config, "${FILE_LOG_PATTERN:-"
-				+ "%d{${LOG_DATEFORMAT_PATTERN:-yyyy-MM-dd'T'HH:mm:ss.SSSXXX}} ${LOG_LEVEL_PATTERN:-%5p} ${PID:- } --- [%t] "
-				+ "%-40.40logger{39} : %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}}"));
-		config.getContext().putProperty("FILE_LOG_CHARSET",
-				resolve(config, "${FILE_LOG_CHARSET:-" + defaultCharset + "}"));
+		config.getContext()
+			.putProperty("CONSOLE_LOG_CHARSET", resolve(config, "${CONSOLE_LOG_CHARSET:-" + defaultCharset + "}"));
+		config.getContext().putProperty("CONSOLE_LOG_THRESHOLD", resolve(config, "${CONSOLE_LOG_THRESHOLD:-TRACE}"));
+		config.getContext()
+			.putProperty("FILE_LOG_PATTERN", resolve(config, "${FILE_LOG_PATTERN:-"
+					+ "%d{${LOG_DATEFORMAT_PATTERN:-yyyy-MM-dd'T'HH:mm:ss.SSSXXX}} ${LOG_LEVEL_PATTERN:-%5p} ${PID:- } --- %applicationName[%t] "
+					+ "${LOG_CORRELATION_PATTERN:-}"
+					+ "%-40.40logger{39} : %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}}"));
+		config.getContext()
+			.putProperty("FILE_LOG_CHARSET", resolve(config, "${FILE_LOG_CHARSET:-" + defaultCharset + "}"));
+		config.getContext().putProperty("FILE_LOG_THRESHOLD", resolve(config, "${FILE_LOG_THRESHOLD:-TRACE}"));
 		config.logger("org.apache.catalina.startup.DigesterFactory", Level.ERROR);
 		config.logger("org.apache.catalina.util.LifecycleBase", Level.ERROR);
 		config.logger("org.apache.coyote.http11.Http11NioProtocol", Level.WARN);
@@ -93,6 +103,10 @@ class DefaultLogbackConfiguration {
 
 	private Appender<ILoggingEvent> consoleAppender(LogbackConfigurator config) {
 		ConsoleAppender<ILoggingEvent> appender = new ConsoleAppender<>();
+		ThresholdFilter filter = new ThresholdFilter();
+		filter.setLevel(resolve(config, "${CONSOLE_LOG_THRESHOLD}"));
+		filter.start();
+		appender.addFilter(filter);
 		PatternLayoutEncoder encoder = new PatternLayoutEncoder();
 		encoder.setPattern(resolve(config, "${CONSOLE_LOG_PATTERN}"));
 		encoder.setCharset(resolveCharset(config, "${CONSOLE_LOG_CHARSET}"));
@@ -104,6 +118,10 @@ class DefaultLogbackConfiguration {
 
 	private Appender<ILoggingEvent> fileAppender(LogbackConfigurator config, String logFile) {
 		RollingFileAppender<ILoggingEvent> appender = new RollingFileAppender<>();
+		ThresholdFilter filter = new ThresholdFilter();
+		filter.setLevel(resolve(config, "${FILE_LOG_THRESHOLD}"));
+		filter.start();
+		appender.addFilter(filter);
 		PatternLayoutEncoder encoder = new PatternLayoutEncoder();
 		encoder.setPattern(resolve(config, "${FILE_LOG_PATTERN}"));
 		encoder.setCharset(resolveCharset(config, "${FILE_LOG_CHARSET}"));
@@ -120,8 +138,8 @@ class DefaultLogbackConfiguration {
 		rollingPolicy.setContext(config.getContext());
 		rollingPolicy.setFileNamePattern(
 				resolve(config, "${LOGBACK_ROLLINGPOLICY_FILE_NAME_PATTERN:-${LOG_FILE}.%d{yyyy-MM-dd}.%i.gz}"));
-		rollingPolicy.setCleanHistoryOnStart(
-				resolveBoolean(config, "${LOGBACK_ROLLINGPOLICY_CLEAN_HISTORY_ON_START:-false}"));
+		rollingPolicy
+			.setCleanHistoryOnStart(resolveBoolean(config, "${LOGBACK_ROLLINGPOLICY_CLEAN_HISTORY_ON_START:-false}"));
 		rollingPolicy.setMaxFileSize(resolveFileSize(config, "${LOGBACK_ROLLINGPOLICY_MAX_FILE_SIZE:-10MB}"));
 		rollingPolicy.setTotalSizeCap(resolveFileSize(config, "${LOGBACK_ROLLINGPOLICY_TOTAL_SIZE_CAP:-0}"));
 		rollingPolicy.setMaxHistory(resolveInt(config, "${LOGBACK_ROLLINGPOLICY_MAX_HISTORY:-7}"));

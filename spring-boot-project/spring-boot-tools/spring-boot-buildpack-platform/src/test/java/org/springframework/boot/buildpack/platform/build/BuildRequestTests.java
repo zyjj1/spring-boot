@@ -21,6 +21,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,6 +53,8 @@ import static org.assertj.core.api.Assertions.entry;
  */
 class BuildRequestTests {
 
+	private static final ZoneId UTC = ZoneId.of("UTC");
+
 	@TempDir
 	File tempDir;
 
@@ -78,32 +83,33 @@ class BuildRequestTests {
 	@Test
 	void forJarFileWhenJarFileIsNullThrowsException() {
 		assertThatIllegalArgumentException().isThrownBy(() -> BuildRequest.forJarFile(null))
-				.withMessage("JarFile must not be null");
+			.withMessage("JarFile must not be null");
 	}
 
 	@Test
 	void forJarFileWhenJarFileIsMissingThrowsException() {
 		assertThatIllegalArgumentException()
-				.isThrownBy(() -> BuildRequest.forJarFile(new File(this.tempDir, "missing.jar")))
-				.withMessage("JarFile must exist");
+			.isThrownBy(() -> BuildRequest.forJarFile(new File(this.tempDir, "missing.jar")))
+			.withMessage("JarFile must exist");
 	}
 
 	@Test
 	void forJarFileWhenJarFileIsDirectoryThrowsException() {
 		assertThatIllegalArgumentException().isThrownBy(() -> BuildRequest.forJarFile(this.tempDir))
-				.withMessage("JarFile must be a file");
+			.withMessage("JarFile must be a file");
 	}
 
 	@Test
 	void withBuilderUpdatesBuilder() throws IOException {
 		BuildRequest request = BuildRequest.forJarFile(writeTestJarFile("my-app-0.0.1.jar"))
-				.withBuilder(ImageReference.of("spring/builder"));
+			.withBuilder(ImageReference.of("spring/builder"));
 		assertThat(request.getBuilder()).hasToString("docker.io/spring/builder:latest");
 	}
 
 	@Test
 	void withBuilderWhenHasDigestUpdatesBuilder() throws IOException {
-		BuildRequest request = BuildRequest.forJarFile(writeTestJarFile("my-app-0.0.1.jar")).withBuilder(ImageReference
+		BuildRequest request = BuildRequest.forJarFile(writeTestJarFile("my-app-0.0.1.jar"))
+			.withBuilder(ImageReference
 				.of("spring/builder@sha256:6e9f67fa63b0323e9a1e587fd71c561ba48a034504fb804fd26fd8800039835d"));
 		assertThat(request.getBuilder()).hasToString(
 				"docker.io/spring/builder@sha256:6e9f67fa63b0323e9a1e587fd71c561ba48a034504fb804fd26fd8800039835d");
@@ -112,13 +118,14 @@ class BuildRequestTests {
 	@Test
 	void withRunImageUpdatesRunImage() throws IOException {
 		BuildRequest request = BuildRequest.forJarFile(writeTestJarFile("my-app-0.0.1.jar"))
-				.withRunImage(ImageReference.of("example.com/custom/run-image:latest"));
+			.withRunImage(ImageReference.of("example.com/custom/run-image:latest"));
 		assertThat(request.getRunImage()).hasToString("example.com/custom/run-image:latest");
 	}
 
 	@Test
 	void withRunImageWhenHasDigestUpdatesRunImage() throws IOException {
-		BuildRequest request = BuildRequest.forJarFile(writeTestJarFile("my-app-0.0.1.jar")).withRunImage(ImageReference
+		BuildRequest request = BuildRequest.forJarFile(writeTestJarFile("my-app-0.0.1.jar"))
+			.withRunImage(ImageReference
 				.of("example.com/custom/run-image@sha256:6e9f67fa63b0323e9a1e587fd71c561ba48a034504fb804fd26fd8800039835d"));
 		assertThat(request.getRunImage()).hasToString(
 				"example.com/custom/run-image@sha256:6e9f67fa63b0323e9a1e587fd71c561ba48a034504fb804fd26fd8800039835d");
@@ -157,14 +164,14 @@ class BuildRequestTests {
 	void withEnvWhenKeyIsNullThrowsException() throws IOException {
 		BuildRequest request = BuildRequest.forJarFile(writeTestJarFile("my-app-0.0.1.jar"));
 		assertThatIllegalArgumentException().isThrownBy(() -> request.withEnv(null, "test"))
-				.withMessage("Name must not be empty");
+			.withMessage("Name must not be empty");
 	}
 
 	@Test
 	void withEnvWhenValueIsNullThrowsException() throws IOException {
 		BuildRequest request = BuildRequest.forJarFile(writeTestJarFile("my-app-0.0.1.jar"));
 		assertThatIllegalArgumentException().isThrownBy(() -> request.withEnv("test", null))
-				.withMessage("Value must not be empty");
+			.withMessage("Value must not be empty");
 	}
 
 	@Test
@@ -181,7 +188,7 @@ class BuildRequestTests {
 	void withBuildpacksWhenBuildpacksIsNullThrowsException() throws IOException {
 		BuildRequest request = BuildRequest.forJarFile(writeTestJarFile("my-app-0.0.1.jar"));
 		assertThatIllegalArgumentException().isThrownBy(() -> request.withBuildpacks((List<BuildpackReference>) null))
-				.withMessage("Buildpacks must not be null");
+			.withMessage("Buildpacks must not be null");
 	}
 
 	@Test
@@ -198,7 +205,7 @@ class BuildRequestTests {
 	void withBindingsWhenBindingsIsNullThrowsException() throws IOException {
 		BuildRequest request = BuildRequest.forJarFile(writeTestJarFile("my-app-0.0.1.jar"));
 		assertThatIllegalArgumentException().isThrownBy(() -> request.withBindings((List<Binding>) null))
-				.withMessage("Bindings must not be null");
+			.withMessage("Bindings must not be null");
 	}
 
 	@Test
@@ -223,7 +230,23 @@ class BuildRequestTests {
 	void withTagsWhenTagsIsNullThrowsException() throws IOException {
 		BuildRequest request = BuildRequest.forJarFile(writeTestJarFile("my-app-0.0.1.jar"));
 		assertThatIllegalArgumentException().isThrownBy(() -> request.withTags((List<ImageReference>) null))
-				.withMessage("Tags must not be null");
+			.withMessage("Tags must not be null");
+	}
+
+	@Test
+	void withBuildWorkspaceVolumeAddsWorkspace() throws IOException {
+		BuildRequest request = BuildRequest.forJarFile(writeTestJarFile("my-app-0.0.1.jar"));
+		BuildRequest withWorkspace = request.withBuildWorkspace(Cache.volume("build-workspace"));
+		assertThat(request.getBuildWorkspace()).isNull();
+		assertThat(withWorkspace.getBuildWorkspace()).isEqualTo(Cache.volume("build-workspace"));
+	}
+
+	@Test
+	void withBuildWorkspaceBindAddsWorkspace() throws IOException {
+		BuildRequest request = BuildRequest.forJarFile(writeTestJarFile("my-app-0.0.1.jar"));
+		BuildRequest withWorkspace = request.withBuildWorkspace(Cache.bind("/tmp/build-workspace"));
+		assertThat(request.getBuildWorkspace()).isNull();
+		assertThat(withWorkspace.getBuildWorkspace()).isEqualTo(Cache.bind("/tmp/build-workspace"));
 	}
 
 	@Test
@@ -235,10 +258,18 @@ class BuildRequestTests {
 	}
 
 	@Test
+	void withBuildBindCacheAddsCache() throws IOException {
+		BuildRequest request = BuildRequest.forJarFile(writeTestJarFile("my-app-0.0.1.jar"));
+		BuildRequest withCache = request.withBuildCache(Cache.bind("/tmp/build-cache"));
+		assertThat(request.getBuildCache()).isNull();
+		assertThat(withCache.getBuildCache()).isEqualTo(Cache.bind("/tmp/build-cache"));
+	}
+
+	@Test
 	void withBuildVolumeCacheWhenCacheIsNullThrowsException() throws IOException {
 		BuildRequest request = BuildRequest.forJarFile(writeTestJarFile("my-app-0.0.1.jar"));
 		assertThatIllegalArgumentException().isThrownBy(() -> request.withBuildCache(null))
-				.withMessage("BuildCache must not be null");
+			.withMessage("BuildCache must not be null");
 	}
 
 	@Test
@@ -250,10 +281,63 @@ class BuildRequestTests {
 	}
 
 	@Test
+	void withLaunchBindCacheAddsCache() throws IOException {
+		BuildRequest request = BuildRequest.forJarFile(writeTestJarFile("my-app-0.0.1.jar"));
+		BuildRequest withCache = request.withLaunchCache(Cache.bind("/tmp/launch-cache"));
+		assertThat(request.getLaunchCache()).isNull();
+		assertThat(withCache.getLaunchCache()).isEqualTo(Cache.bind("/tmp/launch-cache"));
+	}
+
+	@Test
 	void withLaunchVolumeCacheWhenCacheIsNullThrowsException() throws IOException {
 		BuildRequest request = BuildRequest.forJarFile(writeTestJarFile("my-app-0.0.1.jar"));
 		assertThatIllegalArgumentException().isThrownBy(() -> request.withLaunchCache(null))
-				.withMessage("LaunchCache must not be null");
+			.withMessage("LaunchCache must not be null");
+	}
+
+	@Test
+	void withCreatedDateSetsCreatedDate() throws Exception {
+		Instant createDate = Instant.now();
+		BuildRequest request = BuildRequest.forJarFile(writeTestJarFile("my-app-0.0.1.jar"));
+		BuildRequest withCreatedDate = request.withCreatedDate(createDate.toString());
+		assertThat(withCreatedDate.getCreatedDate()).isEqualTo(createDate);
+	}
+
+	@Test
+	void withCreatedDateNowSetsCreatedDate() throws Exception {
+		OffsetDateTime now = OffsetDateTime.now(UTC);
+		BuildRequest request = BuildRequest.forJarFile(writeTestJarFile("my-app-0.0.1.jar"));
+		BuildRequest withCreatedDate = request.withCreatedDate("now");
+		OffsetDateTime createdDate = OffsetDateTime.ofInstant(withCreatedDate.getCreatedDate(), UTC);
+		assertThat(createdDate.getYear()).isEqualTo(now.getYear());
+		assertThat(createdDate.getMonth()).isEqualTo(now.getMonth());
+		assertThat(createdDate.getDayOfMonth()).isEqualTo(now.getDayOfMonth());
+		withCreatedDate = request.withCreatedDate("NOW");
+		createdDate = OffsetDateTime.ofInstant(withCreatedDate.getCreatedDate(), UTC);
+		assertThat(createdDate.getYear()).isEqualTo(now.getYear());
+		assertThat(createdDate.getMonth()).isEqualTo(now.getMonth());
+		assertThat(createdDate.getDayOfMonth()).isEqualTo(now.getDayOfMonth());
+	}
+
+	@Test
+	void withCreatedDateAndInvalidDateThrowsException() throws Exception {
+		BuildRequest request = BuildRequest.forJarFile(writeTestJarFile("my-app-0.0.1.jar"));
+		assertThatIllegalArgumentException().isThrownBy(() -> request.withCreatedDate("not a date"))
+			.withMessageContaining("'not a date'");
+	}
+
+	@Test
+	void withApplicationDirectorySetsApplicationDirectory() throws Exception {
+		BuildRequest request = BuildRequest.forJarFile(writeTestJarFile("my-app-0.0.1.jar"));
+		BuildRequest withAppDir = request.withApplicationDirectory("/application");
+		assertThat(withAppDir.getApplicationDirectory()).isEqualTo("/application");
+	}
+
+	@Test
+	void withSecurityOptionsSetsSecurityOptions() throws Exception {
+		BuildRequest request = BuildRequest.forJarFile(writeTestJarFile("my-app-0.0.1.jar"));
+		BuildRequest withAppDir = request.withSecurityOptions(List.of("label=user:USER", "label=role:ROLE"));
+		assertThat(withAppDir.getSecurityOptions()).containsExactly("label=user:USER", "label=role:ROLE");
 	}
 
 	private void hasExpectedJarContent(TarArchive archive) {

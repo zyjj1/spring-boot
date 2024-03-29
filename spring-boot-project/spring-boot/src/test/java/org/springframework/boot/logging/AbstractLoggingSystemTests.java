@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,20 @@
 
 package org.springframework.boot.logging;
 
+import java.io.File;
 import java.nio.file.Path;
+import java.util.Arrays;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.io.TempDir;
+import org.slf4j.MDC;
 
+import org.springframework.boot.ansi.AnsiOutput;
+import org.springframework.boot.ansi.AnsiOutput.Enabled;
 import org.springframework.util.StringUtils;
+
+import static org.assertj.core.api.Assertions.contentOf;
 
 /**
  * Base for {@link LoggingSystem} tests.
@@ -37,21 +44,45 @@ public abstract class AbstractLoggingSystemTests {
 
 	private String originalTempDirectory;
 
+	private AnsiOutput.Enabled ansiOutputEnabled;
+
 	@BeforeEach
-	void configureTempDir(@TempDir Path temp) {
+	void beforeEach(@TempDir Path temp) {
+		disableAnsiOutput();
+		configureTempDir(temp);
+	}
+
+	private void disableAnsiOutput() {
+		this.ansiOutputEnabled = AnsiOutput.getEnabled();
+		AnsiOutput.setEnabled(Enabled.NEVER);
+	}
+
+	private void configureTempDir(@TempDir Path temp) {
 		this.originalTempDirectory = System.getProperty(JAVA_IO_TMPDIR);
 		System.setProperty(JAVA_IO_TMPDIR, temp.toAbsolutePath().toString());
+		MDC.clear();
 	}
 
 	@AfterEach
-	void reinstateTempDir() {
+	void afterEach() {
+		reinstateTempDir();
+		restoreAnsiOutputEnabled();
+	}
+
+	private void reinstateTempDir() {
 		System.setProperty(JAVA_IO_TMPDIR, this.originalTempDirectory);
+	}
+
+	private void restoreAnsiOutputEnabled() {
+		AnsiOutput.setEnabled(this.ansiOutputEnabled);
 	}
 
 	@AfterEach
 	void clear() {
-		System.clearProperty(LoggingSystemProperties.LOG_FILE);
-		System.clearProperty(LoggingSystemProperties.PID_KEY);
+		for (LoggingSystemProperty property : LoggingSystemProperty.values()) {
+			System.getProperties().remove(property.getEnvironmentVariableName());
+		}
+		MDC.clear();
 	}
 
 	protected final String[] getSpringConfigLocations(AbstractLoggingSystem system) {
@@ -76,6 +107,17 @@ public abstract class AbstractLoggingSystemTests {
 			path = path.substring(0, path.length() - 1);
 		}
 		return path;
+	}
+
+	protected final String getLineWithText(File file, CharSequence outputSearch) {
+		return getLineWithText(contentOf(file), outputSearch);
+	}
+
+	protected final String getLineWithText(CharSequence output, CharSequence outputSearch) {
+		return Arrays.stream(output.toString().split("\\r?\\n"))
+			.filter((line) -> line.contains(outputSearch))
+			.findFirst()
+			.orElse(null);
 	}
 
 }

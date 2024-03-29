@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2022 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -50,7 +50,7 @@ class MimeMappingsTests {
 	@Test
 	void defaultsCannotBeModified() {
 		assertThatExceptionOfType(UnsupportedOperationException.class)
-				.isThrownBy(() -> MimeMappings.DEFAULT.add("foo", "foo/bar"));
+			.isThrownBy(() -> MimeMappings.DEFAULT.add("foo", "foo/bar"));
 	}
 
 	@Test
@@ -152,7 +152,7 @@ class MimeMappingsTests {
 	@Test
 	void mimeTypesInDefaultMappingsAreCorrectlyStructured() {
 		String regName = "[A-Za-z0-9!#$&.+\\-^_]{1,127}";
-		Pattern pattern = Pattern.compile("^" + regName + "\\/" + regName + "$");
+		Pattern pattern = Pattern.compile("^" + regName + "/" + regName + "$");
 		assertThat(MimeMappings.DEFAULT).allSatisfy((mapping) -> assertThat(mapping.getMimeType()).matches(pattern));
 	}
 
@@ -218,10 +218,10 @@ class MimeMappingsTests {
 	@Test
 	void mimeMappingsMatchesTomcatDefaults() throws IOException {
 		Properties ourDefaultMimeMappings = PropertiesLoaderUtils
-				.loadProperties(new ClassPathResource("mime-mappings.properties", getClass()));
+			.loadProperties(new ClassPathResource("mime-mappings.properties", getClass()));
 		Properties tomcatDefaultMimeMappings = PropertiesLoaderUtils
-				.loadProperties(new ClassPathResource("MimeTypeMappings.properties", Tomcat.class));
-		assertThat(ourDefaultMimeMappings).isEqualTo(tomcatDefaultMimeMappings);
+			.loadProperties(new ClassPathResource("MimeTypeMappings.properties", Tomcat.class));
+		assertThat(ourDefaultMimeMappings).containsExactlyInAnyOrderEntriesOf(tomcatDefaultMimeMappings);
 	}
 
 	@Test
@@ -229,7 +229,7 @@ class MimeMappingsTests {
 		RuntimeHints runtimeHints = new RuntimeHints();
 		new MimeMappingsRuntimeHints().registerHints(runtimeHints, getClass().getClassLoader());
 		assertThat(RuntimeHintsPredicates.resource()
-				.forResource("org/springframework/boot/web/server/mime-mappings.properties")).accepts(runtimeHints);
+			.forResource("org/springframework/boot/web/server/mime-mappings.properties")).accepts(runtimeHints);
 	}
 
 }
